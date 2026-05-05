@@ -14,11 +14,26 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Extract project
+      - name: Extract and fix project
         run: |
           unzip -o SalahGuard.zip
-          ls -la
-          find . -name "settings.gradle"
+          cd SalahGuard
+          RES=app/src/main/res
+          # Move adaptive icons to correct v26 folder
+          mkdir -p $RES/mipmap-anydpi-v26
+          cp $RES/mipmap-hdpi/ic_launcher.xml $RES/mipmap-anydpi-v26/ic_launcher.xml
+          cp $RES/mipmap-hdpi/ic_launcher.xml $RES/mipmap-anydpi-v26/ic_launcher_round.xml
+          # Replace all mipmap folders with simple PNG-style solid color icon
+          for dir in mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi; do
+            cat > $RES/$dir/ic_launcher.xml << 'ICON'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <solid android:color="#00E5A0"/>
+            <corners android:radius="8dp"/>
+          </shape>
+          ICON
+            cp $RES/$dir/ic_launcher.xml $RES/$dir/ic_launcher_round.xml
+          done
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
