@@ -14,15 +14,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Find project root
+      - name: Extract project
         run: |
-          echo "Root contents:"
+          unzip -o SalahGuard.zip
           ls -la
-          echo "Finding settings.gradle:"
-          find . -name "settings.gradle" 2>/dev/null
-          PROJ=$(dirname $(find . -name "settings.gradle" | head -1))
-          echo "Project is at: $PROJ"
-          echo "PROJECT_DIR=$PROJ" >> $GITHUB_ENV
+          find . -name "settings.gradle"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
@@ -31,7 +27,7 @@ jobs:
 
       - name: Build APK
         run: |
-          cd $PROJECT_DIR
+          cd SalahGuard
           gradle assembleDebug --no-daemon
         env:
           GRADLE_OPTS: "-Xmx2g"
