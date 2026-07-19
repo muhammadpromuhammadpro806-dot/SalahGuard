@@ -1,0 +1,2748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SalahGuard — Prayer Times, Qibla &amp; Quran</title>
+<meta name="description" content="SalahGuard — a premium Islamic companion app for prayer times, Qibla direction, Quran, duas and more.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Manrope:wght@400;500;600;700;800&family=Amiri:wght@400;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<!-- Firebase (compat SDK — simplest to use in a single plain-script file, no bundler needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+/* ============================================================
+   SalahGuard — Design Tokens
+   A calm, mosque-at-dusk palette: ink-emerald darks, warm gold
+   accent, sand light mode. Not the generic cream+terracotta or
+   pure-black+neon combos — grounded in real mosque materials:
+   patinated brass, lantern glass, courtyard stone.
+   ============================================================ */
+:root{
+  --radius-lg: 26px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --font-display: 'Marcellus', 'Amiri', serif;
+  --font-body: 'Manrope', -apple-system, sans-serif;
+  --font-arabic: 'Amiri', serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --shadow-soft: 0 12px 40px -12px rgba(0,0,0,0.45);
+  --shadow-lift: 0 20px 60px -16px rgba(0,0,0,0.55);
+  --ease: cubic-bezier(.22,.9,.32,1);
+
+  /* accent palettes (overridden by [data-accent]) */
+  --accent: #D4AF6A;
+  --accent-ink: #3A2E12;
+  --accent-soft: rgba(212,175,106,0.16);
+}
+
+/* ---- Theme: Dark (default) ---- */
+[data-theme="dark"]{
+  --bg: #0A1613;
+  --bg-elev: #0F1E19;
+  --surface: #132720;
+  --surface-2: #172F27;
+  --surface-glass: rgba(19,39,32,0.62);
+  --border: rgba(255,255,255,0.07);
+  --text: #EEF3EF;
+  --text-dim: #9FB3AA;
+  --text-faint: #6D8079;
+  --success:#4FBE8E; --danger:#E2685C; --warning:#E3B65B;
+}
+/* ---- Theme: AMOLED ---- */
+[data-theme="amoled"]{
+  --bg: #000000;
+  --bg-elev: #060A08;
+  --surface: #0A0F0D;
+  --surface-2: #101613;
+  --surface-glass: rgba(10,15,13,0.7);
+  --border: rgba(255,255,255,0.08);
+  --text: #F2F5F3;
+  --text-dim: #93A79E;
+  --text-faint: #5E6F68;
+  --success:#4FBE8E; --danger:#E2685C; --warning:#E3B65B;
+}
+/* ---- Theme: Light ---- */
+[data-theme="light"]{
+  --bg: #F3EFE4;
+  --bg-elev: #FBF9F3;
+  --surface: #FFFFFF;
+  --surface-2: #F6F2E8;
+  --surface-glass: rgba(255,255,255,0.6);
+  --border: rgba(20,30,25,0.08);
+  --text: #17231E;
+  --text-dim: #58685F;
+  --text-faint: #8B978F;
+  --success:#2E8F63; --danger:#C74A3E; --warning:#B8842E;
+}
+
+/* ---- Accent palettes ---- */
+[data-accent="gold"]{ --accent:#D4AF6A; --accent-ink:#332508; --accent-soft:rgba(212,175,106,0.16); }
+[data-accent="teal"]{ --accent:#2FA98C; --accent-ink:#052620; --accent-soft:rgba(47,169,140,0.16); }
+[data-accent="rose"]{ --accent:#CC8A8F; --accent-ink:#341012; --accent-soft:rgba(204,138,143,0.16); }
+[data-accent="violet"]{ --accent:#9A8AD1; --accent-ink:#1c1533; --accent-soft:rgba(154,138,209,0.18); }
+[data-accent="sky"]{ --accent:#6FA8C9; --accent-ink:#0c2330; --accent-soft:rgba(111,168,201,0.16); }
+
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family:var(--font-body);
+  background: var(--bg-elev);
+  color:var(--text);
+  min-height:100vh;
+  display:flex; align-items:center; justify-content:center;
+  overflow-x:hidden;
+}
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:0.01ms !important; transition-duration:0.01ms !important; }
+}
+button{ font-family:inherit; }
+h1,h2,h3,h4{ font-family:var(--font-display); font-weight:400; margin:0; letter-spacing:.2px; }
+p{ margin:0; }
+a{ color:inherit; }
+::selection{ background:var(--accent-soft); }
+
+/* ============ Device frame (desktop preview shell) ============ */
+#device-wrap{
+  width:100%;
+  min-height:100vh;
+  display:flex; align-items:center; justify-content:center;
+  padding:18px;
+  background:
+    radial-gradient(1200px 700px at 20% -10%, rgba(212,175,106,0.07), transparent 60%),
+    radial-gradient(1000px 800px at 100% 100%, rgba(47,169,140,0.06), transparent 60%),
+    var(--bg-elev);
+}
+.device{
+  position:relative;
+  width:412px; max-width:100vw;
+  height:890px; max-height:100vh;
+  background:var(--bg);
+  border-radius:44px;
+  overflow:hidden;
+  box-shadow: var(--shadow-lift), 0 0 0 10px #0d0d0d, 0 0 0 11px rgba(255,255,255,0.06);
+  display:flex; flex-direction:column;
+  transition:background .4s var(--ease);
+}
+@media (min-width:481px){
+  .device{ border-radius:44px; }
+}
+@media (max-width:480px){
+  .device{ border-radius:0; box-shadow:none; height:100vh; }
+  #device-wrap{ padding:0; }
+}
+
+.statusbar{
+  height:env(safe-area-inset-top, 14px);
+  min-height:14px;
+  flex-shrink:0;
+}
+
+/* ============ Top App Bar ============ */
+.appbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 20px 14px;
+  flex-shrink:0;
+  position:relative; z-index:5;
+}
+.appbar .brand{ display:flex; align-items:center; gap:10px; }
+.brand-mark{
+  width:34px; height:34px; border-radius:10px;
+  background:linear-gradient(155deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #000));
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-display); color:var(--accent-ink); font-size:17px; font-weight:700;
+  box-shadow:0 6px 16px -4px var(--accent-soft);
+}
+.brand-name{ font-family:var(--font-display); font-size:19px; letter-spacing:.3px; }
+.appbar-icons{ display:flex; gap:6px; }
+.icon-btn{
+  width:38px; height:38px; border-radius:12px; border:none;
+  background:var(--surface); color:var(--text-dim);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:transform .15s var(--ease), background .2s, color .2s;
+}
+.icon-btn:active{ transform:scale(.9); }
+.icon-btn:hover{ color:var(--text); }
+.icon-btn svg{ width:18px; height:18px; }
+
+/* ============ View root & page transitions ============ */
+#view-root{
+  flex:1; min-height:0; position:relative; overflow:hidden;
+}
+.page{
+  position:absolute; inset:0;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  padding:2px 20px 100px;
+  opacity:0; transform:translateY(14px) scale(.995);
+  pointer-events:none;
+  transition:opacity .38s var(--ease), transform .38s var(--ease);
+  scrollbar-width:none;
+}
+.page::-webkit-scrollbar{ display:none; }
+.page.active{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+.page.no-pad{ padding-left:0; padding-right:0; }
+
+/* ============ Bottom Tab Bar ============ */
+.tabbar{
+  flex-shrink:0;
+  display:flex;
+  padding:8px 14px calc(10px + env(safe-area-inset-bottom));
+  gap:4px;
+  background:var(--surface-glass);
+  backdrop-filter:blur(20px) saturate(1.4);
+  -webkit-backdrop-filter:blur(20px) saturate(1.4);
+  border-top:1px solid var(--border);
+  position:relative; z-index:6;
+}
+.tab-btn{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+  padding:7px 2px; border:none; background:none; color:var(--text-faint);
+  cursor:pointer; border-radius:14px; transition:color .2s, background .2s;
+  font-size:10.5px; font-weight:600;
+}
+.tab-btn svg{ width:21px; height:21px; transition:transform .25s var(--ease); }
+.tab-btn.active{ color:var(--accent); }
+.tab-btn.active svg{ transform:translateY(-2px) scale(1.05); }
+.tab-btn:active svg{ transform:scale(.85); }
+
+/* ============ Cards & primitives ============ */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-md);
+  padding:18px;
+}
+.card-tight{ padding:14px 16px; }
+.section-title{
+  display:flex; align-items:center; justify-content:space-between;
+  margin:22px 0 12px;
+}
+.section-title h3{ font-size:15px; color:var(--text-dim); font-weight:600; font-family:var(--font-body); text-transform:uppercase; letter-spacing:1.2px; }
+.link-btn{ background:none; border:none; color:var(--accent); font-weight:700; font-size:13px; cursor:pointer; padding:4px; }
+
+.btn{
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; padding:15px 18px; border-radius:16px; border:none;
+  font-weight:700; font-size:15px; cursor:pointer;
+  transition:transform .15s var(--ease), filter .2s, box-shadow .2s;
+}
+.btn:active{ transform:scale(.97); }
+.btn-primary{ background:linear-gradient(155deg, var(--accent), color-mix(in srgb, var(--accent) 75%, #000)); color:var(--accent-ink); box-shadow:0 10px 26px -10px var(--accent-soft); }
+.btn-primary:hover{ filter:brightness(1.06); }
+.btn-ghost{ background:var(--surface); color:var(--text); border:1px solid var(--border); }
+.btn-outline{ background:transparent; color:var(--accent); border:1.5px solid var(--accent); }
+.btn-danger{ background:color-mix(in srgb, var(--danger) 16%, transparent); color:var(--danger); border:1px solid color-mix(in srgb, var(--danger) 40%, transparent); }
+.btn-sm{ padding:9px 14px; font-size:12.5px; width:auto; border-radius:12px; }
+.btn[disabled]{ opacity:.5; pointer-events:none; }
+
+.field{ margin-bottom:14px; }
+.field label{ display:block; font-size:12.5px; font-weight:700; color:var(--text-dim); margin-bottom:7px; letter-spacing:.2px; }
+.input-wrap{ position:relative; }
+.field input, .field select, .field textarea{
+  width:100%; padding:14px 15px; border-radius:14px; border:1.5px solid var(--border);
+  background:var(--surface); color:var(--text); font-size:14.5px; font-family:inherit;
+  outline:none; transition:border-color .2s, background .2s;
+}
+.field input:focus, .field select:focus, .field textarea:focus{ border-color:var(--accent); }
+.field .toggle-eye{ position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-faint); cursor:pointer; }
+.field-hint{ font-size:11.5px; color:var(--text-faint); margin-top:6px; }
+.field-error{ font-size:11.5px; color:var(--danger); margin-top:6px; display:none; }
+.field.invalid input{ border-color:var(--danger); }
+.field.invalid .field-error{ display:block; }
+
+.chip{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:8px 13px; border-radius:100px; background:var(--surface-2);
+  border:1px solid var(--border); font-size:12.5px; font-weight:700; color:var(--text-dim);
+  cursor:pointer; transition:all .2s var(--ease); white-space:nowrap;
+}
+.chip.active{ background:var(--accent-soft); color:var(--accent); border-color:transparent; }
+.chip-row{ display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none; }
+.chip-row::-webkit-scrollbar{ display:none; }
+
+.divider{ height:1px; background:var(--border); margin:16px 0; }
+
+.badge{ font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:8px; letter-spacing:.3px; }
+.badge-accent{ background:var(--accent-soft); color:var(--accent); }
+.badge-danger{ background:color-mix(in srgb, var(--danger) 18%, transparent); color:var(--danger); }
+.badge-success{ background:color-mix(in srgb, var(--success) 18%, transparent); color:var(--success); }
+.badge-warn{ background:color-mix(in srgb, var(--warning) 20%, transparent); color:var(--warning); }
+
+/* ============ Skeleton loaders ============ */
+.skel{ position:relative; overflow:hidden; background:var(--surface-2); border-radius:10px; }
+.skel::after{
+  content:''; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,0.09), transparent);
+  animation:shimmer 1.4s infinite;
+}
+@keyframes shimmer{ 100%{ transform:translateX(100%); } }
+
+/* ============ Toasts ============ */
+#toast-root{ position:absolute; left:0; right:0; bottom:96px; display:flex; flex-direction:column; align-items:center; gap:8px; z-index:80; pointer-events:none; padding:0 20px;}
+.toast{
+  background:var(--surface); border:1px solid var(--border); color:var(--text);
+  padding:12px 18px; border-radius:14px; font-size:13.5px; font-weight:600;
+  box-shadow:var(--shadow-soft); display:flex; align-items:center; gap:9px;
+  animation:toast-in .35s var(--ease); max-width:100%;
+}
+.toast.success{ border-color:color-mix(in srgb, var(--success) 40%, transparent); }
+.toast.error{ border-color:color-mix(in srgb, var(--danger) 40%, transparent); }
+@keyframes toast-in{ from{ opacity:0; transform:translateY(10px) scale(.95); } to{ opacity:1; transform:translateY(0) scale(1); } }
+.toast.leaving{ animation:toast-out .3s var(--ease) forwards; }
+@keyframes toast-out{ to{ opacity:0; transform:translateY(6px) scale(.96); } }
+
+/* ============ Modal ============ */
+#modal-root{ position:absolute; inset:0; z-index:90; display:none; }
+#modal-root.open{ display:block; }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(3px); animation:fade-in .25s var(--ease); }
+@keyframes fade-in{ from{opacity:0;} to{opacity:1;} }
+.modal-sheet{
+  position:absolute; left:0; right:0; bottom:0; background:var(--bg);
+  border-radius:26px 26px 0 0; padding:22px 20px calc(24px + env(safe-area-inset-bottom));
+  max-height:88%; overflow-y:auto; border:1px solid var(--border); border-bottom:none;
+  animation:sheet-up .35s var(--ease);
+  box-shadow:0 -20px 60px -20px rgba(0,0,0,0.5);
+}
+@keyframes sheet-up{ from{ transform:translateY(100%);} to{ transform:translateY(0);} }
+.modal-handle{ width:38px; height:4px; border-radius:10px; background:var(--border); margin:0 auto 16px; }
+.modal-title{ font-size:19px; margin-bottom:6px; }
+.modal-sub{ font-size:13px; color:var(--text-dim); margin-bottom:18px; line-height:1.5; }
+
+/* ============ Onboarding ============ */
+#onboarding{ position:absolute; inset:0; z-index:100; background:var(--bg); display:flex; flex-direction:column; }
+.ob-slides{ flex:1; display:flex; overflow-x:hidden; position:relative; }
+.ob-slide{ min-width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 34px; text-align:center; gap:22px; transition:opacity .4s var(--ease); }
+.ob-art{ width:170px; height:170px; border-radius:50%; display:flex; align-items:center; justify-content:center; position:relative; }
+.ob-art svg{ width:88px; height:88px; }
+.ob-title{ font-size:25px; line-height:1.3; }
+.ob-desc{ font-size:14px; color:var(--text-dim); line-height:1.6; max-width:280px; }
+.ob-dots{ display:flex; gap:7px; justify-content:center; padding:10px 0 26px; }
+.ob-dot{ width:7px; height:7px; border-radius:50%; background:var(--border); transition:all .3s var(--ease); }
+.ob-dot.active{ width:22px; background:var(--accent); }
+.ob-actions{ display:flex; gap:10px; padding:0 24px calc(28px + env(safe-area-inset-bottom)); }
+
+/* ============ Auth ============ */
+.auth-hero{ padding:34px 4px 8px; text-align:center; }
+.auth-hero .brand-mark{ width:54px; height:54px; border-radius:16px; font-size:26px; margin:0 auto 16px; }
+.auth-hero h1{ font-size:26px; margin-bottom:6px; }
+.auth-hero p{ color:var(--text-dim); font-size:13.5px; }
+.auth-tabs{ display:flex; background:var(--surface); border-radius:16px; padding:4px; margin:20px 0 22px; border:1px solid var(--border); }
+.auth-tab{ flex:1; text-align:center; padding:10px 0; border-radius:12px; font-weight:700; font-size:13.5px; color:var(--text-dim); cursor:pointer; transition:all .25s var(--ease); }
+.auth-tab.active{ background:var(--accent); color:var(--accent-ink); }
+.strength-bar{ display:flex; gap:4px; margin-top:8px; }
+.strength-bar div{ height:4px; flex:1; border-radius:4px; background:var(--surface-2); transition:background .3s; }
+.remember-row{ display:flex; align-items:center; justify-content:space-between; margin:2px 0 20px; }
+.check-row{ display:flex; align-items:center; gap:9px; cursor:pointer; user-select:none; }
+.checkbox{ width:20px; height:20px; border-radius:7px; border:1.6px solid var(--border); display:flex; align-items:center; justify-content:center; transition:all .2s; flex-shrink:0; }
+.checkbox.checked{ background:var(--accent); border-color:var(--accent); }
+.checkbox.checked svg{ width:13px; height:13px; color:var(--accent-ink); }
+.divider-or{ display:flex; align-items:center; gap:12px; margin:20px 0; color:var(--text-faint); font-size:12px; font-weight:700; }
+.divider-or::before, .divider-or::after{ content:''; flex:1; height:1px; background:var(--border); }
+.google-btn{ display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:14px; border-radius:16px; background:var(--surface); border:1.5px solid var(--border); color:var(--text); font-weight:700; font-size:14px; cursor:pointer; }
+.auth-foot{ text-align:center; margin-top:20px; font-size:13px; color:var(--text-dim); padding-bottom:20px; }
+.captcha-box{ background:var(--surface-2); border:1px dashed var(--border); border-radius:14px; padding:16px; text-align:center; margin-bottom:14px; }
+.captcha-sum{ font-family:var(--font-mono); font-size:20px; font-weight:700; margin:8px 0 12px; letter-spacing:1px; }
+
+/* ============ Home: Hero arch card ============ */
+.greeting-row{ display:flex; align-items:center; justify-content:space-between; padding:10px 0 6px; }
+.greeting-row h2{ font-size:21px; }
+.greeting-row .loc{ display:flex; align-items:center; gap:5px; font-size:12.5px; color:var(--text-dim); margin-top:3px; font-weight:600; }
+.greeting-row .loc svg{ width:13px; height:13px; }
+.avatar{ width:42px; height:42px; border-radius:13px; background:var(--surface); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--accent); border:1px solid var(--border); overflow:hidden; cursor:pointer; }
+.avatar img{ width:100%; height:100%; object-fit:cover; }
+
+.mihrab-card{
+  position:relative; margin-top:14px; border-radius:30px 30px 20px 20px;
+  padding:26px 22px 22px;
+  background:
+    radial-gradient(120% 100% at 50% 0%, var(--accent-soft), transparent 60%),
+    linear-gradient(175deg, var(--surface), var(--surface-2));
+  border:1px solid var(--border);
+  overflow:hidden;
+}
+.mihrab-card::before{
+  content:''; position:absolute; inset:0; opacity:.5; pointer-events:none;
+  background-image:
+    radial-gradient(circle at 15% 20%, var(--border) 0.5px, transparent 0.5px),
+    radial-gradient(circle at 45% 60%, var(--border) 0.5px, transparent 0.5px),
+    radial-gradient(circle at 75% 30%, var(--border) 0.5px, transparent 0.5px),
+    radial-gradient(circle at 90% 80%, var(--border) 0.5px, transparent 0.5px);
+  background-size:60px 60px;
+}
+.mihrab-top{ display:flex; align-items:center; justify-content:space-between; position:relative; z-index:1; }
+.mihrab-top .eyebrow{ font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); font-weight:700; }
+.mihrab-top .next-name{ font-family:var(--font-display); font-size:30px; margin-top:2px; }
+.ring-wrap{ position:relative; width:112px; height:112px; flex-shrink:0; }
+.ring-wrap svg{ width:100%; height:100%; transform:rotate(-90deg); }
+.ring-wrap circle{ fill:none; stroke-linecap:round; }
+.ring-bg{ stroke:var(--border); stroke-width:7; }
+.ring-fg{ stroke:var(--accent); stroke-width:7; transition:stroke-dashoffset 1s linear; }
+.ring-center{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.ring-center .t{ font-family:var(--font-mono); font-weight:600; font-size:15px; letter-spacing:.5px; }
+.ring-center .l{ font-size:9.5px; color:var(--text-faint); font-weight:700; margin-top:2px; }
+.mihrab-time{ font-family:var(--font-mono); font-size:15px; color:var(--text-dim); margin-top:14px; position:relative; z-index:1; }
+
+.prayer-list{ display:flex; flex-direction:column; gap:10px; margin-top:10px; }
+.prayer-row{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 16px; border-radius:18px; background:var(--surface);
+  border:1px solid var(--border); transition:all .25s var(--ease);
+}
+.prayer-row.current{ border-color:color-mix(in srgb, var(--accent) 55%, transparent); background:var(--accent-soft); }
+.prayer-row .left{ display:flex; align-items:center; gap:12px; }
+.prayer-icon{ width:38px; height:38px; border-radius:12px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; color:var(--text-dim); }
+.prayer-row.current .prayer-icon{ background:var(--accent); color:var(--accent-ink); }
+.prayer-icon svg{ width:18px; height:18px; }
+.prayer-name{ font-weight:700; font-size:14.5px; }
+.prayer-sub{ font-size:11.5px; color:var(--text-faint); margin-top:1px; }
+.prayer-time{ font-family:var(--font-mono); font-weight:600; font-size:15px; }
+
+.quick-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:8px; }
+.quick-item{ display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 4px; border-radius:18px; background:var(--surface); border:1px solid var(--border); cursor:pointer; transition:transform .15s var(--ease); }
+.quick-item:active{ transform:scale(.93); }
+.quick-item .qi-icon{ width:42px; height:42px; border-radius:13px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; color:var(--accent); }
+.quick-item .qi-icon svg{ width:19px; height:19px; }
+.quick-item span{ font-size:10.5px; font-weight:700; color:var(--text-dim); text-align:center; }
+
+.pull-indicator{ display:flex; align-items:center; justify-content:center; height:0; overflow:hidden; color:var(--text-faint); font-size:11px; font-weight:700; transition:height .25s var(--ease); gap:6px; }
+.pull-indicator.show{ height:34px; }
+.spin{ animation:spin 1s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+/* ============ Method / location page ============ */
+.method-option{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-radius:16px; border:1.5px solid var(--border); margin-bottom:9px; cursor:pointer; transition:all .2s var(--ease); }
+.method-option.active{ border-color:var(--accent); background:var(--accent-soft); }
+.method-option .m-name{ font-weight:700; font-size:14px; }
+.method-option .m-sub{ font-size:11.5px; color:var(--text-faint); margin-top:2px; }
+.radio-dot{ width:20px; height:20px; border-radius:50%; border:2px solid var(--border); position:relative; flex-shrink:0; }
+.method-option.active .radio-dot{ border-color:var(--accent); }
+.method-option.active .radio-dot::after{ content:''; position:absolute; inset:3px; border-radius:50%; background:var(--accent); }
+.week-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+.week-table th{ text-align:left; color:var(--text-faint); font-weight:700; padding:8px 6px; font-size:10.5px; text-transform:uppercase; }
+.week-table td{ padding:10px 6px; border-top:1px solid var(--border); font-family:var(--font-mono); }
+.week-table tr.today td{ color:var(--accent); font-weight:700; }
+
+/* ============ Qibla ============ */
+.qibla-wrap{ display:flex; flex-direction:column; align-items:center; padding:24px 0 10px; }
+.qibla-deg{ font-family:var(--font-mono); font-size:15px; color:var(--text-dim); margin-bottom:18px; }
+.compass{ width:280px; height:280px; border-radius:50%; position:relative; background:radial-gradient(circle at 50% 40%, var(--surface-2), var(--surface)); border:1px solid var(--border); box-shadow:var(--shadow-soft); }
+.compass-ring{ position:absolute; inset:14px; border-radius:50%; border:1px dashed var(--border); }
+.compass-n{ position:absolute; top:22px; left:50%; transform:translateX(-50%); font-size:11px; font-weight:800; color:var(--text-faint); letter-spacing:1px; }
+.needle-pivot{ position:absolute; inset:0; transition:transform .3s ease-out; }
+.needle{ position:absolute; left:50%; top:50%; width:5px; height:110px; transform:translate(-50%,-100%); border-radius:6px; background:linear-gradient(180deg, var(--accent), transparent); }
+.kaaba-dot{ position:absolute; left:50%; top:16px; transform:translateX(-50%); width:30px; height:30px; border-radius:9px; background:var(--accent); display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px -4px var(--accent-soft); }
+.kaaba-dot svg{ width:15px; height:15px; color:var(--accent-ink); }
+.center-dot{ position:absolute; left:50%; top:50%; width:10px; height:10px; border-radius:50%; background:var(--text); transform:translate(-50%,-50%); }
+.qibla-note{ text-align:center; font-size:12.5px; color:var(--text-faint); margin-top:20px; padding:0 20px; line-height:1.6; }
+.qibla-aligned{ color:var(--success); font-weight:800; }
+
+/* ============ Quran ============ */
+.surah-row{ display:flex; align-items:center; gap:14px; padding:14px 6px; border-bottom:1px solid var(--border); cursor:pointer; }
+.surah-num{ width:36px; height:36px; border-radius:11px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:12px; font-weight:700; color:var(--accent); flex-shrink:0; }
+.surah-mid{ flex:1; min-width:0; }
+.surah-en{ font-weight:700; font-size:14.5px; }
+.surah-sub{ font-size:11.5px; color:var(--text-faint); margin-top:1px; }
+.surah-ar{ font-family:var(--font-arabic); font-size:19px; color:var(--text-dim); }
+.ayah-card{ padding:20px 4px; border-bottom:1px solid var(--border); }
+.ayah-ar{ font-family:var(--font-arabic); font-size:27px; line-height:2.1; text-align:right; direction:rtl; margin-bottom:12px; }
+.ayah-num-badge{ display:inline-flex; width:24px; height:24px; border-radius:50%; background:var(--accent-soft); color:var(--accent); align-items:center; justify-content:center; font-size:11px; font-weight:800; font-family:var(--font-mono); margin-right:6px; }
+.ayah-tr{ font-size:13.5px; color:var(--text-dim); line-height:1.7; }
+.reader-toolbar{ display:flex; align-items:center; justify-content:space-between; padding:12px 0; position:sticky; top:0; background:var(--bg); z-index:3; border-bottom:1px solid var(--border); margin-bottom:6px; }
+
+/* ============ Hadith / Duas ============ */
+.hadith-card{ margin-bottom:12px; }
+.hadith-card .htext{ font-size:14px; line-height:1.75; color:var(--text); margin-bottom:10px; }
+.hadith-src{ font-size:11.5px; color:var(--text-faint); font-weight:700; }
+.dua-card{ margin-bottom:12px; }
+.dua-ar{ font-family:var(--font-arabic); font-size:22px; text-align:right; direction:rtl; line-height:1.9; margin-bottom:10px; }
+.dua-translit{ font-size:12.5px; color:var(--accent); font-style:italic; margin-bottom:6px; font-weight:600; }
+.dua-meaning{ font-size:13px; color:var(--text-dim); line-height:1.6; }
+
+/* ============ Tasbih ============ */
+.tasbih-wrap{ display:flex; flex-direction:column; align-items:center; padding:10px 0; }
+.tasbih-dhikr{ font-family:var(--font-arabic); font-size:24px; margin-bottom:4px; }
+.tasbih-mean{ font-size:12px; color:var(--text-faint); margin-bottom:22px; }
+.tasbih-ring{ width:230px; height:230px; border-radius:50%; position:relative; cursor:pointer; user-select:none; }
+.tasbih-ring svg{ width:100%; height:100%; transform:rotate(-90deg); }
+.tasbih-count{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.tasbih-count .n{ font-family:var(--font-mono); font-size:52px; font-weight:600; }
+.tasbih-count .of{ font-size:12px; color:var(--text-faint); margin-top:2px; }
+.tasbih-actions{ display:flex; gap:10px; margin-top:26px; width:100%; }
+.tasbih-target-row{ display:flex; gap:8px; margin-top:20px; }
+
+/* ============ Zakat ============ */
+.zakat-result{ text-align:center; padding:26px 16px; border-radius:22px; background:var(--accent-soft); margin-top:18px; }
+.zakat-result .amt{ font-family:var(--font-mono); font-size:34px; font-weight:700; color:var(--accent); }
+.zakat-result .lbl{ font-size:12px; color:var(--text-dim); margin-top:4px; font-weight:700; }
+
+/* ============ Mosques ============ */
+.mosque-row{ display:flex; gap:13px; padding:14px 0; border-bottom:1px solid var(--border); }
+.mosque-icon{ width:46px; height:46px; border-radius:14px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; color:var(--accent); flex-shrink:0; }
+.mosque-name{ font-weight:700; font-size:14.5px; }
+.mosque-sub{ font-size:11.5px; color:var(--text-faint); margin-top:2px; }
+.mosque-dist{ font-family:var(--font-mono); font-size:12px; color:var(--accent); font-weight:700; white-space:nowrap; }
+
+/* ============ Settings / Profile ============ */
+.profile-card{ display:flex; align-items:center; gap:14px; padding:18px; margin-top:6px; }
+.profile-avatar{ width:60px; height:60px; border-radius:18px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-size:24px; color:var(--accent); overflow:hidden; position:relative; flex-shrink:0; }
+.profile-avatar img{ width:100%; height:100%; object-fit:cover; }
+.profile-name{ font-size:16.5px; font-weight:700; }
+.profile-email{ font-size:12px; color:var(--text-faint); margin-top:2px; }
+.settings-row{ display:flex; align-items:center; justify-content:space-between; padding:14px 2px; border-bottom:1px solid var(--border); cursor:pointer; }
+.settings-row:last-child{ border-bottom:none; }
+.settings-row .sr-left{ display:flex; align-items:center; gap:12px; }
+.settings-row .sr-icon{ width:36px; height:36px; border-radius:11px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; color:var(--text-dim); flex-shrink:0; }
+.settings-row .sr-icon svg{ width:17px; height:17px; }
+.settings-row .sr-title{ font-size:14px; font-weight:700; }
+.settings-row .sr-sub{ font-size:11.5px; color:var(--text-faint); margin-top:1px; }
+.chevron{ color:var(--text-faint); }
+
+.switch{ width:46px; height:27px; border-radius:20px; background:var(--surface-2); border:1px solid var(--border); position:relative; cursor:pointer; flex-shrink:0; transition:background .25s; }
+.switch.on{ background:var(--accent); border-color:transparent; }
+.switch .knob{ position:absolute; top:2px; left:2px; width:21px; height:21px; border-radius:50%; background:#fff; transition:transform .25s var(--ease); box-shadow:0 2px 6px rgba(0,0,0,0.3); }
+.switch.on .knob{ transform:translateX(19px); }
+
+.theme-opt-row{ display:flex; gap:10px; }
+.theme-opt{ flex:1; padding:14px 8px; border-radius:16px; border:1.5px solid var(--border); text-align:center; cursor:pointer; transition:all .2s var(--ease); }
+.theme-opt.active{ border-color:var(--accent); }
+.theme-opt .swatch{ width:100%; height:44px; border-radius:11px; margin-bottom:8px; }
+.theme-opt span{ font-size:11.5px; font-weight:700; color:var(--text-dim); }
+.accent-row{ display:flex; gap:12px; padding:6px 0; }
+.accent-dot{ width:38px; height:38px; border-radius:50%; cursor:pointer; position:relative; border:3px solid transparent; transition:all .2s var(--ease); }
+.accent-dot.active{ border-color:var(--text); }
+.accent-dot.active::after{ content:'✓'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px; font-weight:800; text-shadow:0 1px 3px rgba(0,0,0,.4); }
+
+.session-row{ display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--border); }
+.session-icon{ width:38px; height:38px; border-radius:12px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; color:var(--text-dim); }
+.blocked-row{ display:flex; align-items:center; justify-content:space-between; padding:13px 0; border-bottom:1px solid var(--border); }
+
+/* ============ Admin ============ */
+.admin-stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.admin-stat{ padding:16px; border-radius:18px; background:var(--surface); border:1px solid var(--border); }
+.admin-stat .v{ font-family:var(--font-mono); font-size:24px; font-weight:700; }
+.admin-stat .l{ font-size:11px; color:var(--text-faint); font-weight:700; margin-top:3px; }
+.admin-table-row{ display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border); gap:10px; }
+.admin-user-name{ font-weight:700; font-size:13.5px; }
+.admin-user-sub{ font-size:11px; color:var(--text-faint); }
+.bar-chart{ display:flex; align-items:flex-end; gap:6px; height:100px; margin-top:10px; }
+.bar-chart .bar{ flex:1; background:linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 40%, transparent)); border-radius:6px 6px 2px 2px; transition:height .6s var(--ease); }
+
+/* ============ Empty states ============ */
+.empty-state{ text-align:center; padding:50px 20px; color:var(--text-faint); }
+.empty-state svg{ width:52px; height:52px; margin-bottom:14px; opacity:.6; }
+.empty-state p{ font-size:13.5px; line-height:1.6; }
+
+/* ============ Misc ============ */
+.rtl{ direction:rtl; }
+.center-col{ display:flex; flex-direction:column; align-items:center; text-align:center; }
+.mt-page-title{ padding:18px 0 4px; }
+.mt-page-title h2{ font-size:23px; }
+.mt-page-title p{ font-size:13px; color:var(--text-dim); margin-top:4px; }
+
+/* ============ Prayer Focus Lock overlay ============ */
+#focus-lock-root{ position:absolute; inset:0; z-index:300; }
+.focus-lock{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:16px; padding:40px 30px; text-align:center;
+  background:
+    radial-gradient(140% 100% at 50% 0%, var(--accent-soft), transparent 65%),
+    var(--bg);
+}
+.focus-icon{ width:90px; height:90px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; animation:focus-pulse 2.2s ease-in-out infinite; }
+.focus-icon svg{ width:42px; height:42px; }
+@keyframes focus-pulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.08); } }
+.focus-lock h2{ font-size:23px; }
+.focus-lock p{ font-size:13.5px; color:var(--text-dim); max-width:270px; line-height:1.6; }
+.focus-lock .btn{ max-width:280px; }
+</style>
+</head>
+<body data-theme="dark" data-accent="gold">
+<div id="device-wrap">
+<div class="device" id="device">
+  <div class="statusbar"></div>
+
+  <!-- ONBOARDING (first run only) -->
+  <div id="onboarding"></div>
+
+  <!-- APP BAR -->
+  <div class="appbar" id="appbar">
+    <div class="brand" id="appbar-brand">
+      <button class="icon-btn" id="btn-back" style="display:none" onclick="Router.back()"></button>
+      <div id="brand-mark-wrap" class="brand-mark">S</div>
+      <div class="brand-name" id="appbar-title">SalahGuard</div>
+    </div>
+    <div class="appbar-icons">
+      <button class="icon-btn" id="btn-notif" title="Notifications" onclick="Router.go('notifications')"></button>
+      <button class="icon-btn" id="btn-theme" title="Appearance" onclick="Modal.themeSheet()"></button>
+    </div>
+  </div>
+
+  <!-- PAGES -->
+  <div id="view-root"></div>
+
+  <!-- TOASTS + MODAL -->
+  <div id="toast-root"></div>
+  <div id="modal-root"></div>
+  <div id="focus-lock-root" style="display:none;"></div>
+
+  <!-- BOTTOM TABS -->
+  <div class="tabbar" id="tabbar"></div>
+</div>
+</div>
+<script>
+/* ============================================================
+   SalahGuard — Single-file front-end + Firebase backend
+   By M. Hammad Shafiq
+
+   FIREBASE SETUP — paste your own project's config below.
+   Get it from: Firebase Console → Project settings → General →
+   "Your apps" → Web app → SDK setup and configuration.
+   Auth (Email/Password) + Firestore must be enabled — see the
+   chat for step-by-step instructions and security rules.
+   ============================================================ */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCCHCFQ2wd5ExU3jpScyPxUDhUXb-CYF0c",
+  authDomain: "salahguard-a5d5e.firebaseapp.com",
+  databaseURL: "https://salahguard-a5d5e-default-rtdb.firebaseio.com",
+  projectId: "salahguard-a5d5e",
+  storageBucket: "salahguard-a5d5e.firebasestorage.app",
+  messagingSenderId: "1062419380065",
+  appId: "1:1062419380065:web:2032dfe482e1e82e207720",
+  measurementId: "G-PVSH46HTPF",
+};
+const FIREBASE_CONFIGURED = FIREBASE_CONFIG.apiKey !== "PASTE_YOUR_API_KEY";
+let fbAuth = null, db = null, FIREBASE_READY = false, FIREBASE_LOAD_ERROR = null;
+try {
+  if (!FIREBASE_CONFIGURED) {
+    console.warn('SalahGuard: Firebase config not set yet — see FIREBASE_CONFIG at the top of the script.');
+  } else if (typeof firebase === 'undefined') {
+    // The gstatic.com <script> tags in <head> didn't load — usually an ad
+    // blocker/privacy extension (uBlock, Brave Shields, tracker blockers)
+    // flagging "firebase" scripts, or a network/firewall blocking Google
+    // domains. This never crashes the app now — it just disables sign-in.
+    FIREBASE_LOAD_ERROR = 'sdk-blocked';
+    console.error('SalahGuard: Firebase SDK failed to load — check for an ad blocker/privacy extension blocking gstatic.com, or a network firewall blocking Google domains.');
+  } else {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbAuth = firebase.auth();
+    db = firebase.firestore();
+    FIREBASE_READY = true;
+  }
+} catch (e) {
+  FIREBASE_LOAD_ERROR = e.message;
+  console.error('SalahGuard: Firebase failed to initialize —', e);
+}
+/* IMPORTANT — how to actually run this file so Firebase & the live
+   Hadith library work:
+   Opening this HTML file by double-clicking it loads it as
+   file:///... — browsers block fetch() to external APIs AND
+   reject Firebase Auth from that origin. You must serve it from a
+   real http(s) address. Easiest options:
+     1) Firebase Hosting: `firebase init hosting` then `firebase deploy`
+        (free, and it's already your project).
+     2) GitHub Pages: push this file to a repo, enable Pages.
+     3) Local testing: run `python3 -m http.server` in this folder
+        and open http://localhost:8000/SalahGuard.html
+   Whichever domain you end up using, add it under Firebase Console
+   → Authentication → Settings → Authorized domains, or sign-in will
+   fail with an "unauthorized-domain" error.
+   If FIREBASE_LOAD_ERROR shows 'sdk-blocked' in the console, an ad
+   blocker or privacy extension is likely blocking gstatic.com —
+   whitelist this page's domain or try in a different browser/profile. */
+const IS_FILE_PROTOCOL = window.location.protocol === 'file:';
+/* Where to send manual password-reset requests, since sign-up asked
+   for a direct-to-developer-email flow instead of Firebase's
+   automated reset email. */
+const SUPPORT_EMAIL = "muhammed.hammad76@gmail.com";
+</script>
+<script>
+/* ============================================================
+   NOTE ON SCOPE (read me):
+   Prayer-time astronomy, Hijri conversion, Qibla bearing,
+   theming and every screen here are fully real and working
+   client-side. Authentication now runs on real Firebase
+   Auth + Firestore (once you paste your config above).
+   The admin panel and blocking/report lists still use
+   localStorage as a UI demo — moving those to a real backend
+   would mean Cloud Functions + Firestore rules restricting
+   admin actions to accounts with an "admin" custom claim.
+   ============================================================ */
+
+
+/* ---------------------------- ICONS ---------------------------- */
+const ICONS = {
+  home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>',
+  quran:'<path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H12v16h6.5a1.5 1.5 0 0 0 1.5-1.5z"/>',
+  compass:'<circle cx="12" cy="12" r="9"/><path d="m14.5 9.5-2 5-5 2 2-5z"/>',
+  more:'<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
+  bell:'<path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  sliders:'<path d="M4 6h9M17 6h3M4 12h3M9 12h11M4 18h13M19 18h1"/><circle cx="14" cy="6" r="2"/><circle cx="7" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  chevronR:'<path d="m9 6 6 6-6 6"/>',
+  chevronL:'<path d="m15 18-6-6 6-6"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  check:'<path d="M5 13l4 4L19 7"/>',
+  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff:'<path d="M3 3l18 18"/><path d="M10.6 5.2A9.6 9.6 0 0 1 12 5c6.5 0 10 7 10 7a15.4 15.4 0 0 1-3.4 4.2M6.6 6.6C4 8.3 2 12 2 12s3.5 7 10 7c1.3 0 2.5-.3 3.6-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  pin:'<path d="M12 21s7-6.6 7-11.5a7 7 0 1 0-14 0C5 14.4 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.4"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+  sunrise:'<path d="M12 3v4M4.9 10.9l1.4 1.4M19.1 10.9l-1.4 1.4M2 18h20M6 18a6 6 0 0 1 12 0"/>',
+  sun:'<circle cx="12" cy="12" r="4.5"/><path d="M12 2v3M12 19v3M4.2 4.2l2 2M17.8 17.8l2 2M2 12h3M19 12h3M4.2 19.8l2-2M17.8 6.2l2-2"/>',
+  sunset:'<path d="M12 10V6M4.9 12.9l1.4 1.4M19.1 12.9l-1.4 1.4M2 18h20M6 18a6 6 0 0 1 12 0"/><path d="M9 3h6"/>',
+  moonstars:'<path d="M20 12.5A8 8 0 1 1 11.5 4a6.2 6.2 0 0 0 8.5 8.5Z"/><path d="M18 3l.6 1.4L20 5l-1.4.6L18 7l-.6-1.4L16 5l1.4-.6Z"/>',
+  crescent:'<path d="M20 12.5A8 8 0 1 1 11.5 4a6.2 6.2 0 0 0 8.5 8.5Z"/>',
+  mosque:'<path d="M12 3c1.6 1.4 2.4 2.8 2.4 4.2A2.4 2.4 0 0 1 12 9.6a2.4 2.4 0 0 1-2.4-2.4C9.6 5.8 10.4 4.4 12 3Z"/><path d="M3 21v-6c0-2.8 2-4.6 4-5.6M21 21v-6c0-2.8-2-4.6-4-5.6M7 21v-4a5 5 0 0 1 10 0v4"/><path d="M2 21h20"/>',
+  book:'<path d="M4 19.5V5.2C4 4.5 4.6 4 5.3 4H18a1 1 0 0 1 1 1v14"/><path d="M4 19.5c0 .8.7 1.5 1.5 1.5H19"/><path d="M8 8h8M8 11h8"/>',
+  heart:'<path d="M12 20s-7.5-4.6-9.7-9.4C.9 7 3 3.5 6.6 3.5 9 3.5 11 5 12 6.5c1-1.5 3-3 5.4-3 3.6 0 5.7 3.5 4.3 7.1C19.5 15.4 12 20 12 20Z"/>',
+  coins:'<circle cx="8" cy="9" r="5.5"/><path d="M13 13.5a5.5 5.5 0 1 0 5.4-6.6"/>',
+  calendar:'<rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  beads:'<circle cx="12" cy="5" r="1.8"/><circle cx="17" cy="8" r="1.8"/><circle cx="19" cy="14" r="1.8"/><circle cx="15" cy="19" r="1.8"/><circle cx="9" cy="19" r="1.8"/><circle cx="5" cy="14" r="1.8"/><circle cx="7" cy="8" r="1.8"/>',
+  users:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15.5 13.2A5.6 5.6 0 0 1 21.5 20"/>',
+  shield:'<path d="M12 3.5 19 6v6c0 5-3.4 7.6-7 8.5-3.6-.9-7-3.5-7-8.5V6z"/>',
+  ban:'<circle cx="12" cy="12" r="9"/><path d="m5.5 5.5 13 13"/>',
+  trash:'<path d="M4 7h16M9 7V4.8c0-.4.4-.8.9-.8h4.2c.5 0 .9.4.9.8V7M6 7l1 12.7c0 .7.6 1.3 1.4 1.3h7.2c.8 0 1.4-.6 1.4-1.3L18 7"/>',
+  download:'<path d="M12 3v13m0 0-4-4m4 4 4-4"/><path d="M4 19h16"/>',
+  upload:'<path d="M12 20V7m0 0-4 4m4-4 4 4"/><path d="M4 19h16"/>',
+  logout:'<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M14 16l4-4-4-4"/><path d="M18 12H9"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  lock:'<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 1 1 8 0v2.5"/>',
+  monitor:'<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/>',
+  flag:'<path d="M5 21V4"/><path d="M5 4.5c2-1 4-1 6 0s4 1 6 0v9c-2 1-4 1-6 0s-4-1-6 0"/>',
+  history:'<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3.5 2"/>',
+  edit:'<path d="M4 20h4L20 8l-4-4L4 16z"/><path d="M14.5 5.5l4 4"/>',
+  camera:'<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1-2h7l1 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="12.5" r="3.4"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  minus:'<path d="M5 12h14"/>',
+  refresh:'<path d="M4 12a8 8 0 0 1 13.7-5.7L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.7L4 16"/><path d="M4 20v-4h4"/>',
+  arrowR:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+  google:'<path d="M21 12.2c0-.7 0-1.4-.2-2H12v3.9h5c-.2 1.1-.9 2.1-1.9 2.8v2.3h3.1c1.8-1.6 2.8-4 2.8-7Z"/><path d="M12 21c2.5 0 4.6-.8 6.2-2.2l-3.1-2.3c-.9.6-2 .9-3.1.9-2.4 0-4.4-1.6-5.1-3.7H3.7v2.4A9 9 0 0 0 12 21Z"/><path d="M6.9 13.7A5.4 5.4 0 0 1 6.6 12c0-.6.1-1.2.3-1.7V7.9H3.7A9 9 0 0 0 3 12c0 1.4.3 2.8 1 4z"/><path d="M12 6.6c1.4 0 2.6.5 3.6 1.4l2.7-2.7A9 9 0 0 0 12 3a9 9 0 0 0-8.3 4.9l3.2 2.4c.6-2.1 2.6-3.7 5.1-3.7Z"/>',
+  building:'<rect x="4" y="3" width="10" height="18" rx="1"/><path d="M14 8h6v13h-6M7.5 7h1M11 7h1M7.5 11h1M11 11h1M7.5 15h1M11 15h1"/>',
+  mail:'<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4 6.5 8 6.5 8-6.5"/>',
+  fingerprint:'<path d="M12 4a7.5 7.5 0 0 1 7.5 7.5c0 2 .2 3.6.6 5"/><path d="M4.5 11.5a7.5 7.5 0 0 1 12.9-5.2"/><path d="M4 15c.5-1.2.8-2.4.8-3.6" /><path d="M8 20.5a12 12 0 0 0 1.8-6.4c0-1.2 1-2.3 2.2-2.3s2.2 1 2.2 2.3c0 2.6.7 5 2 7"/><path d="M12 11.6c0 3.4 1 6.3 2.6 8.7"/>',
+  spark:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
+};
+function ic(name, cls){ return `<svg class="${cls||''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
+
+/* ---------------------------- UTIL ---------------------------- */
+const qs = (s,r)=> (r||document).querySelector(s);
+const qsa = (s,r)=> Array.from((r||document).querySelectorAll(s));
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function vibrate(pattern){ try{ if(navigator.vibrate) navigator.vibrate(pattern||10); }catch(e){} }
+function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
+async function sha256(text){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function pad2(n){ return String(n).padStart(2,'0'); }
+function decToClock(dec, mode24){
+  if(dec==null || isNaN(dec)) return '--:--';
+  dec = ((dec%24)+24)%24;
+  let h = Math.floor(dec), m = Math.round((dec-h)*60);
+  if(m===60){ m=0; h++; }
+  h = h%24;
+  if(mode24) return pad2(h)+':'+pad2(m);
+  const ampm = h>=12?'PM':'AM';
+  let h12 = h%12; if(h12===0) h12=12;
+  return h12+':'+pad2(m)+' '+ampm;
+}
+function toast(msg, type, ms){
+  const root = qs('#toast-root');
+  const t = document.createElement('div');
+  t.className = 'toast'+(type?(' '+type):'');
+  t.innerHTML = (type==='success'?ic('check'):type==='error'?ic('x'):'')+`<span>${esc(msg)}</span>`;
+  root.appendChild(t);
+  setTimeout(()=>{ t.classList.add('leaving'); setTimeout(()=>t.remove(),300); }, ms||2600);
+}
+/* Safety net: if a button click throws an unexpected error anywhere in the
+   app, surface it as a toast (and log the real error to console) instead of
+   the click silently doing nothing — makes bugs visible instead of "the
+   button doesn't work" with no clue why. */
+window.addEventListener('error', (ev)=>{
+  console.error('SalahGuard uncaught error:', ev.error || ev.message);
+  try{ toast('Something went wrong — check the browser console (F12) for details.','error'); }catch(_){}
+});
+window.addEventListener('unhandledrejection', (ev)=>{
+  console.error('SalahGuard unhandled promise rejection:', ev.reason);
+  try{ toast('Something went wrong — check the browser console (F12) for details.','error'); }catch(_){}
+});
+
+/* ---------------------------- STORAGE ---------------------------- */
+const Store = {
+  get(k, d){ try{ const v = localStorage.getItem('sg_'+k); return v==null? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('sg_'+k, JSON.stringify(v)); }catch(e){} },
+  remove(k){ localStorage.removeItem('sg_'+k); }
+};
+
+/* ---------------------------- SEED DATA ---------------------------- */
+const CITIES = [
+  {c:'Mecca',n:'Saudi Arabia',lat:21.4225,lon:39.8262,tz:3},
+  {c:'Medina',n:'Saudi Arabia',lat:24.4672,lon:39.6112,tz:3},
+  {c:'Istanbul',n:'Turkey',lat:41.0082,lon:28.9784,tz:3},
+  {c:'Cairo',n:'Egypt',lat:30.0444,lon:31.2357,tz:2},
+  {c:'Karachi',n:'Pakistan',region:'Sindh',lat:24.8607,lon:67.0011,tz:5},
+  {c:'Hyderabad',n:'Pakistan',region:'Sindh',lat:25.3960,lon:68.3578,tz:5},
+  {c:'Sukkur',n:'Pakistan',region:'Sindh',lat:27.7052,lon:68.8574,tz:5},
+  {c:'Lahore',n:'Pakistan',region:'Punjab',lat:31.5497,lon:74.3436,tz:5},
+  {c:'Gujrat',n:'Pakistan',region:'Punjab',lat:32.5740,lon:74.0789,tz:5},
+  {c:'Sialkot',n:'Pakistan',region:'Punjab',lat:32.4945,lon:74.5229,tz:5},
+  {c:'Kharian',n:'Pakistan',region:'Punjab',lat:32.8123,lon:73.8629,tz:5},
+  {c:'Lalamusa',n:'Pakistan',region:'Punjab',lat:32.6768,lon:73.9640,tz:5},
+  {c:'Faisalabad',n:'Pakistan',region:'Punjab',lat:31.4504,lon:73.1350,tz:5},
+  {c:'Multan',n:'Pakistan',region:'Punjab',lat:30.1575,lon:71.5249,tz:5},
+  {c:'Rawalpindi',n:'Pakistan',region:'Punjab',lat:33.5651,lon:73.0169,tz:5},
+  {c:'Islamabad',n:'Pakistan',region:'Islamabad Capital Territory',lat:33.6844,lon:73.0479,tz:5},
+  {c:'Peshawar',n:'Pakistan',region:'Khyber Pakhtunkhwa',lat:34.0151,lon:71.5249,tz:5},
+  {c:'Abbottabad',n:'Pakistan',region:'Khyber Pakhtunkhwa',lat:34.1463,lon:73.2117,tz:5},
+  {c:'Quetta',n:'Pakistan',region:'Balochistan',lat:30.1798,lon:66.9750,tz:5},
+  {c:'Gwadar',n:'Pakistan',region:'Balochistan',lat:25.1264,lon:62.3225,tz:5},
+  {c:'Muzaffarabad',n:'Pakistan',region:'Azad Kashmir',lat:34.3700,lon:73.4711,tz:5},
+  {c:'Mirpur',n:'Pakistan',region:'Azad Kashmir',lat:33.1478,lon:73.7508,tz:5},
+  {c:'Dhaka',n:'Bangladesh',lat:23.8103,lon:90.4125,tz:6},
+  {c:'Jakarta',n:'Indonesia',lat:-6.2088,lon:106.8456,tz:7},
+  {c:'Kuala Lumpur',n:'Malaysia',lat:3.1390,lon:101.6869,tz:8},
+  {c:'Dubai',n:'UAE',lat:25.2048,lon:55.2708,tz:4},
+  {c:'Doha',n:'Qatar',lat:25.2854,lon:51.5310,tz:3},
+  {c:'Amman',n:'Jordan',lat:31.9454,lon:35.9284,tz:3},
+  {c:'Baghdad',n:'Iraq',lat:33.3152,lon:44.3661,tz:3},
+  {c:'Riyadh',n:'Saudi Arabia',lat:24.7136,lon:46.6753,tz:3},
+  {c:'London',n:'United Kingdom',lat:51.5072,lon:-0.1276,tz:0},
+  {c:'New York',n:'United States',lat:40.7128,lon:-74.0060,tz:-5},
+  {c:'Toronto',n:'Canada',lat:43.6532,lon:-79.3832,tz:-5},
+  {c:'Sydney',n:'Australia',lat:-33.8688,lon:151.2093,tz:11},
+  {c:'Lagos',n:'Nigeria',lat:6.5244,lon:3.3792,tz:1},
+];
+function cityLabel(c){ return c.region ? `${c.c} (${c.region})` : `${c.c}, ${c.n}`; }
+function countryOptions(){ return [...new Set(CITIES.map(c=>c.n))]; }
+const CALC_METHODS = [
+  {id:'MWL', name:'Muslim World League', sub:'Fajr 18° · Isha 17°', fajr:18, isha:17},
+  {id:'ISNA', name:'Islamic Society of North America', sub:'Fajr 15° · Isha 15°', fajr:15, isha:15},
+  {id:'EGYPT', name:'Egyptian General Authority', sub:'Fajr 19.5° · Isha 17.5°', fajr:19.5, isha:17.5},
+  {id:'KARACHI', name:'University of Islamic Sciences, Karachi', sub:'Fajr 18° · Isha 18°', fajr:18, isha:18},
+  {id:'MAKKAH', name:'Umm al-Qura, Makkah', sub:'Fajr 18.5° · Isha 90 min after Maghrib', fajr:18.5, isha:null, ishaMins:90},
+];
+const HADITHS = [
+  {cat:'Prayer', text:'The Prophet ﷺ described the five daily prayers as a river a person washes in five times a day, saying nothing of their dirt would remain — a picture of how the prayers wash away small sins.', src:'Muslim, Book of Prayer (paraphrased)'},
+  {cat:'Character', text:'He ﷺ taught that the believer who is best in conduct is the one who is best towards his own family.', src:'Tirmidhi (paraphrased)'},
+  {cat:'Charity', text:'He ﷺ said a smile offered to a fellow believer is itself counted as an act of charity.', src:'Tirmidhi (paraphrased)'},
+  {cat:'Knowledge', text:'He ﷺ encouraged seeking beneficial knowledge throughout life, describing it as a duty upon every Muslim.', src:'Ibn Majah (paraphrased)'},
+  {cat:'Prayer', text:'He ﷺ said the closest a servant comes to their Lord is while prostrating, so increase supplication in that position.', src:'Muslim (paraphrased)'},
+  {cat:'Character', text:'He ﷺ taught that none of you truly believes until he wishes for his brother what he wishes for himself.', src:'Bukhari &amp; Muslim (paraphrased)'},
+];
+const DUAS = [
+  {cat:'Morning', ar:'أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ', translit:'Asbahna wa asbahal-mulku lillah', mean:'We have reached the morning and the whole kingdom belongs to Allah.'},
+  {cat:'Evening', ar:'أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ', translit:'Amsayna wa amsal-mulku lillah', mean:'We have reached the evening and the whole kingdom belongs to Allah.'},
+  {cat:'Travel', ar:'سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا', translit:'Subhanal-ladhi sakhkhara lana hadha', mean:'Glory to the One who placed this transport at our service.'},
+  {cat:'Eating', ar:'بِسْمِ اللَّهِ', translit:'Bismillah', mean:'In the name of Allah — said before starting a meal.'},
+  {cat:'Eating', ar:'الْحَمْدُ لِلَّهِ الَّذِي أَطْعَمَنَا', translit:'Alhamdu lillahil-ladhi at\'amana', mean:'Praise be to Allah who fed us and gave us drink, and made us Muslims.'},
+  {cat:'Anxiety', ar:'حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ', translit:'Hasbunallahu wa ni\'mal wakeel', mean:'Allah is sufficient for us, and He is the best disposer of affairs.'},
+];
+const SURAHS = [
+  {no:1, en:'Al-Fatihah', mean:'The Opener', ar:'الفاتحة', count:7, ayat:[
+    {ar:'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ', tr:'In the name of Allah, the Most Gracious, the Most Merciful.'},
+    {ar:'الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ', tr:'All praise belongs to Allah, Lord of all worlds.'},
+    {ar:'الرَّحْمَٰنِ الرَّحِيمِ', tr:'The Most Gracious, the Most Merciful.'},
+    {ar:'مَالِكِ يَوْمِ الدِّينِ', tr:'Master of the Day of Judgment.'},
+    {ar:'إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ', tr:'You alone we worship, and You alone we ask for help.'},
+    {ar:'اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ', tr:'Guide us to the straight path.'},
+    {ar:'صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ', tr:'The path of those You have blessed, not of those who earned Your anger, nor of those who went astray.'},
+  ]},
+  {no:112, en:'Al-Ikhlas', mean:'Sincerity', ar:'الإخلاص', count:4, ayat:[
+    {ar:'قُلْ هُوَ اللَّهُ أَحَدٌ', tr:'Say: He is Allah, the One.'},
+    {ar:'اللَّهُ الصَّمَدُ', tr:'Allah, the Eternal Refuge.'},
+    {ar:'لَمْ يَلِدْ وَلَمْ يُولَدْ', tr:'He neither begets nor is born.'},
+    {ar:'وَلَمْ يَكُنْ لَهُ كُفُوًا أَحَدٌ', tr:'Nor is there anyone equal to Him.'},
+  ]},
+  {no:113, en:'Al-Falaq', mean:'The Daybreak', ar:'الفلق', count:5, ayat:[
+    {ar:'قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ', tr:'Say: I seek refuge in the Lord of the daybreak.'},
+    {ar:'مِنْ شَرِّ مَا خَلَقَ', tr:'From the evil of what He has created.'},
+    {ar:'وَمِنْ شَرِّ غَاسِقٍ إِذَا وَقَبَ', tr:'From the evil of darkness as it settles.'},
+    {ar:'وَمِنْ شَرِّ النَّفَّاثَاتِ فِي الْعُقَدِ', tr:'From the evil of those who blow on knots.'},
+    {ar:'وَمِنْ شَرِّ حَاسِدٍ إِذَا حَسَدَ', tr:'And from the evil of an envier when he envies.'},
+  ]},
+  {no:114, en:'An-Nas', mean:'Mankind', ar:'الناس', count:6, ayat:[
+    {ar:'قُلْ أَعُوذُ بِرَبِّ النَّاسِ', tr:'Say: I seek refuge in the Lord of mankind.'},
+    {ar:'مَلِكِ النَّاسِ', tr:'The King of mankind.'},
+    {ar:'إِلَٰهِ النَّاسِ', tr:'The God of mankind.'},
+    {ar:'مِنْ شَرِّ الْوَسْوَاسِ الْخَنَّاسِ', tr:'From the evil of the retreating whisperer.'},
+    {ar:'الَّذِي يُوَسْوِسُ فِي صُدُورِ النَّاسِ', tr:'Who whispers into the hearts of mankind.'},
+    {ar:'مِنَ الْجِنَّةِ وَالنَّاسِ', tr:'From among the jinn and mankind.'},
+  ]},
+];
+const SURAH_INDEX_ONLY = [ [2,'Al-Baqarah','The Cow',286],[3,"Al-'Imran",'Family of Imran',200],[4,'An-Nisa','The Women',176],[18,'Al-Kahf','The Cave',110],[36,'Ya-Sin','Ya Sin',83],[55,'Ar-Rahman','The Beneficent',78],[67,'Al-Mulk','The Sovereignty',30] ];
+const MOSQUES = [
+  {name:'Al-Noor Grand Mosque', dist:'0.4 km', addr:'12 Crescent Road'},
+  {name:'Masjid Al-Taqwa', dist:'0.9 km', addr:'Green Valley Ave'},
+  {name:'Central Islamic Center', dist:'1.6 km', addr:'Riverside District'},
+  {name:'Masjid Bilal', dist:'2.3 km', addr:'Old Town Square'},
+];
+const DHIKR_LIST = [
+  {ar:'سُبْحَانَ اللَّهِ', mean:'Glory be to Allah'},
+  {ar:'الْحَمْدُ لِلَّهِ', mean:'All praise is due to Allah'},
+  {ar:'اللَّهُ أَكْبَرُ', mean:'Allah is the Greatest'},
+  {ar:'لَا إِلَٰهَ إِلَّا اللَّهُ', mean:'There is no god but Allah'},
+  {ar:'أَسْتَغْفِرُ اللَّهَ', mean:'I seek forgiveness from Allah'},
+];
+const HIJRI_MONTHS = ['Muharram','Safar',"Rabi' al-Awwal","Rabi' al-Thani",'Jumada al-Awwal','Jumada al-Thani','Rajab',"Sha'ban",'Ramadan','Shawwal',"Dhu al-Qi'dah",'Dhu al-Hijjah'];
+
+/* ---------------------------- PRAYER CALCULATION ----------------------------
+   Real solar-position astronomy (mean anomaly / ecliptic longitude / equation
+   of time), independent implementation of standard public formulas. Angles
+   in degrees unless noted; D2R/R2D convert to/from radians. */
+const D2R = Math.PI/180, R2D = 180/Math.PI;
+function julianDay(date){
+  const Y=date.getUTCFullYear(), M=date.getUTCMonth()+1, D=date.getUTCDate();
+  const a = Math.floor((14-M)/12), y = Y+4800-a, m = M+12*a-3;
+  return D + Math.floor((153*m+2)/5) + 365*y + Math.floor(y/4) - Math.floor(y/100) + Math.floor(y/400) - 32045;
+}
+function sunPosition(jd){
+  const Dd = jd - 2451545.0;
+  const g = (357.529 + 0.98560028*Dd) % 360;
+  const q = (280.459 + 0.98564736*Dd) % 360;
+  const L = (q + 1.915*Math.sin(g*D2R) + 0.020*Math.sin(2*g*D2R)) % 360;
+  const e = 23.439 - 0.00000036*Dd;
+  const RA = (Math.atan2(Math.cos(e*D2R)*Math.sin(L*D2R), Math.cos(L*D2R)) * R2D) / 15;
+  const decl = Math.asin(Math.sin(e*D2R)*Math.sin(L*D2R)) * R2D;
+  let eqt = q/15 - (((RA%24)+24)%24);
+  if(eqt > 12) eqt -= 24; if(eqt < -12) eqt += 24;
+  return { decl, eqt };
+}
+function hourAngle(altDeg, lat, decl){
+  const num = Math.sin(altDeg*D2R) - Math.sin(lat*D2R)*Math.sin(decl*D2R);
+  const den = Math.cos(lat*D2R)*Math.cos(decl*D2R);
+  let val = num/den;
+  val = Math.max(-1, Math.min(1, val));
+  return Math.acos(val) * R2D / 15;
+}
+function computePrayerTimes(date, lat, lon, tz, methodId, asrMethod){
+  const method = CALC_METHODS.find(m=>m.id===methodId) || CALC_METHODS[0];
+  const jd = julianDay(date);
+  const {decl, eqt} = sunPosition(jd);
+  const dhuhr = 12 + tz - lon/15 - eqt;
+  const fajrH = hourAngle(-method.fajr, lat, decl);
+  const sunriseH = hourAngle(-0.833, lat, decl);
+  const asrFactor = asrMethod==='hanafi' ? 2 : 1;
+  const asrAlt = R2D*Math.atan(1/(asrFactor + Math.tan(Math.abs(lat-decl)*D2R)));
+  const asrH = hourAngle(asrAlt, lat, decl);
+  const maghribH = sunriseH;
+  const fajr = dhuhr - fajrH, sunrise = dhuhr - sunriseH, asr = dhuhr + asrH, maghrib = dhuhr + maghribH;
+  let isha;
+  if(method.ishaMins){ isha = maghrib + method.ishaMins/60; }
+  else { const ishaH = hourAngle(-method.isha, lat, decl); isha = dhuhr + ishaH; }
+  return { fajr, sunrise, dhuhr, asr, maghrib, isha };
+}
+function qiblaBearing(lat, lon){
+  const kLat=21.4225*D2R, kLon=39.8262*D2R, phi1=lat*D2R, l1=lon*D2R;
+  const dLon = kLon - l1;
+  const y = Math.sin(dLon)*Math.cos(kLat);
+  const x = Math.cos(phi1)*Math.sin(kLat) - Math.sin(phi1)*Math.cos(kLat)*Math.cos(dLon);
+  return ((Math.atan2(y,x)*R2D)+360)%360;
+}
+/* Hijri (tabular/"Kuwaiti" algorithm) — standard public arithmetic conversion. Approximate ±1 day vs moon sighting. */
+function gregorianToHijri(date){
+  const Y=date.getFullYear(), M=date.getMonth()+1, D=date.getDate();
+  let jd = Math.floor((1461*(Y+4800+Math.floor((M-14)/12)))/4)
+    + Math.floor((367*(M-2-12*Math.floor((M-14)/12)))/12)
+    - Math.floor((3*Math.floor((Y+4900+Math.floor((M-14)/12))/100))/4)
+    + D - 32075;
+  let l = jd - 1948440 + 10632;
+  const n = Math.floor((l-1)/10631);
+  l = l - 10631*n + 354;
+  const j = Math.floor((10985-l)/5316)*Math.floor((50*l)/17719) + Math.floor(l/5670)*Math.floor((43*l)/15238);
+  l = l - Math.floor((30-j)/15)*Math.floor((17719*j)/50) - Math.floor(j/16)*Math.floor((15238*j)/43) + 29;
+  const month = Math.floor((24*l)/709);
+  const day = l - Math.floor((709*month)/24);
+  const year = 30*n + j - 30;
+  return { year, month, day };
+}
+
+/* ---------------------------- APP STATE ---------------------------- */
+const App = {
+  state: {
+    onboarded: Store.get('onboarded', false),
+    session: Store.get('session', null),           // {userId, remember}
+    settings: Store.get('settings', {
+      theme:'dark', accent:'gold', calcMethod:'MWL', asrMethod:'standard',
+      locationMode:'auto', city:'Karachi', country:'Pakistan', lat:24.8607, lon:67.0011, tz:5,
+      language:'English', clock24:false,
+      notif:{ fajr:true, dhuhr:true, asr:true, maghrib:true, isha:true, jumuah:true, ramadan:true, dailyVerse:true, dailyHadith:true, silentDuringPrayer:false },
+      privacy:{ profileVisible:true, activityStatus:true },
+      focusLock:false,
+    }),
+    users: Store.get('users', []),                 // simulated user DB
+    devices: Store.get('devices', {}),              // {userId: [{id,label,time}]}
+    blocked: Store.get('blocked', []),               // [{name, until:null|ts}]
+    reports: Store.get('reports_sent', []),
+    tasbihHistory: Store.get('tasbih_history', []),
+    notifLog: Store.get('notif_log', [
+      {id:uid(), title:'Welcome to SalahGuard', body:'Set your location to get accurate prayer times.', time:Date.now()-3600e3},
+    ]),
+    adminAuthed: false,
+  },
+  save(key){ Store.set(key==='settings'?'settings':key, this.state[key]); },
+  fbUser: null,      // mirrors firebase.auth().currentUser
+  profile: null,     // mirrors the Firestore users/{uid} document
+  currentUser(){
+    if(this.state.session && this.state.session.guest) return { guest:true, name:'Guest', email:null };
+    if(!this.fbUser) return null;
+    const p = this.profile || {};
+    return {
+      guest:false, id:this.fbUser.uid, name: this.fbUser.displayName || p.name || 'User',
+      email:this.fbUser.email, photo: p.photo || this.fbUser.photoURL || null,
+      country:p.country||'', city:p.city||'', language:p.language||'English',
+      verified:this.fbUser.emailVerified, createdAt:p.createdAt||null,
+    };
+  }
+};
+function saveSettings(){ Store.set('settings', App.state.settings); }
+
+/* ---------------------------- THEME / ACCENT ---------------------------- */
+function applyTheme(){
+  document.body.setAttribute('data-theme', App.state.settings.theme);
+  document.body.setAttribute('data-accent', App.state.settings.accent);
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  qs('#btn-notif').innerHTML = ic('bell');
+  qs('#btn-theme').innerHTML = ic('sliders');
+});
+
+/* ---------------------------- AUTH (real Firebase Auth + Firestore) ----------------------------
+   Requires FIREBASE_CONFIG (top of file) to be filled in with your
+   project's keys, Email/Password sign-in enabled, and Firestore
+   created with the security rules from the setup guide. */
+const PASS_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$/;
+function requireFirebase(){
+  if(!FIREBASE_READY) throw new Error('Firebase isn\'t configured yet — paste your project keys into FIREBASE_CONFIG at the top of the script.');
+}
+const Auth = {
+  async signup({ name, email, password, country, city, language }){
+    requireFirebase();
+    if(!PASS_RULE.test(password)) throw new Error('Password does not meet the strength requirements.');
+    const cred = await fbAuth.createUserWithEmailAndPassword(email, password);
+    await cred.user.updateProfile({ displayName: name });
+    await cred.user.sendEmailVerification();
+    await db.collection('users').doc(cred.user.uid).set({ name, email, country, city, language, createdAt: Date.now() });
+    return cred.user;
+  },
+  async login(email, password, remember){
+    requireFirebase();
+    await fbAuth.setPersistence(remember ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION);
+    const cred = await fbAuth.signInWithEmailAndPassword(email, password);
+    const devs = App.state.devices[cred.user.uid] || [];
+    const isNewDevice = !devs.some(d=>d.label===deviceLabel());
+    if(isNewDevice){ devs.push({ id:uid(), label:deviceLabel(), time:Date.now() }); App.state.devices[cred.user.uid]=devs; App.save('devices'); }
+    return { user: cred.user, isNewDevice };
+  },
+  guestLogin(){
+    App.state.session = { guest:true };
+    Store.set('session', App.state.session);
+  },
+  async logout(){
+    App.state.session = null; Store.remove('session');
+    if(FIREBASE_READY) await fbAuth.signOut();
+  },
+  logoutAllDevices(){
+    // A client can only ever sign out ITS OWN session. Truly revoking
+    // every other device's session requires the Admin SDK's
+    // `revokeRefreshTokens(uid)`, which only runs on a trusted server
+    // (e.g. a Cloud Function) — never expose that capability to the browser.
+    toast('Signing you out here. To force out every other device too, call a Cloud Function that runs admin.auth().revokeRefreshTokens().', null, 4500);
+    return this.logout();
+  },
+  async deleteAccount(){
+    if(!FIREBASE_READY || !fbAuth.currentUser) return this.logout();
+    try{
+      const uid_ = fbAuth.currentUser.uid;
+      await db.collection('users').doc(uid_).delete();
+      await fbAuth.currentUser.delete();
+    }catch(e){
+      if(e.code==='auth/requires-recent-login') throw new Error('For your security, please log out and log back in, then try deleting your account again.');
+      throw e;
+    }
+    await this.logout();
+  }
+};
+function deviceLabel(){
+  const ua = navigator.userAgent || 'device';
+  let key = Store.get('device_label', null);
+  if(key) return key;
+  const short = /Android/.test(ua)?'Android device':/iPhone|iPad/.test(ua)?'iOS device':/Mac/.test(ua)?'Mac':/Windows/.test(ua)?'Windows PC':'Browser';
+  key = short + ' · ' + uid().slice(0,4);
+  Store.set('device_label', key);
+  return key;
+}
+
+/* ---------------------------- ROUTER ---------------------------- */
+const TAB_ROOTS = ['home','quran','qibla','more'];
+const FULLSCREEN_PAGES = ['login','signup','forgot','reset'];
+const Router = {
+  stack: ['home'],
+  get current(){ return this.stack[this.stack.length-1]; },
+  go(name, push){
+    if(TAB_ROOTS.includes(name)){ this.stack = [name]; }
+    else if(push!==false){ this.stack.push(name); }
+    else { this.stack[this.stack.length-1] = name; }
+    this.render();
+  },
+  replace(name){ this.stack[this.stack.length-1] = name; this.render(); },
+  back(){ if(this.stack.length>1){ this.stack.pop(); this.render(); } else { this.go('home'); } },
+  render(){
+    (window.__cleanup||[]).forEach(fn=>{ try{ fn(); }catch(e){} });
+    window.__cleanup = [];
+    const name = this.current;
+    const page = PAGES[name] || PAGES.home;
+    const root = qs('#view-root');
+    root.innerHTML = `<div class="page" id="page-el">${page.render()}</div>`;
+    requestAnimationFrame(()=> qs('#page-el').classList.add('active'));
+    // appbar
+    const isAuth = FULLSCREEN_PAGES.includes(name);
+    qs('#appbar').style.display = isAuth ? 'none' : 'flex';
+    qs('#tabbar').style.display = isAuth ? 'none' : 'flex';
+    qs('#btn-back').style.display = this.stack.length>1 ? 'flex' : 'none';
+    qs('#btn-back').innerHTML = ic('chevronL');
+    qs('#appbar-title').textContent = TAB_ROOTS.includes(name) ? 'SalahGuard' : (page.title||'');
+    qs('#brand-mark-wrap').style.display = this.stack.length>1 ? 'none' : 'flex';
+    renderTabbar();
+    if(page.onMount) setTimeout(page.onMount, 10);
+    window.scrollTo(0,0);
+  }
+};
+function renderTabbar(){
+  const tabs = [
+    {id:'home', label:'Home', icon:'home'},
+    {id:'quran', label:'Quran', icon:'quran'},
+    {id:'qibla', label:'Qibla', icon:'compass'},
+    {id:'more', label:'More', icon:'more'},
+  ];
+  const activeRoot = TAB_ROOTS.includes(Router.current) ? Router.current : (['profile','settings','security','privacy','sessions','blocked','data','zakat','calendar','mosques','hadith','duas','tasbih','notifications','admin','admin-users','admin-reports','admin-broadcast','admin-audit','prayer-settings'].includes(Router.current) ? 'more' : null);
+  qs('#tabbar').innerHTML = tabs.map(t=>`
+    <button class="tab-btn ${activeRoot===t.id?'active':''}" onclick="Router.go('${t.id}')">
+      ${ic(t.icon)}<span>${t.label}</span>
+    </button>`).join('');
+}
+
+/* ---------------------------- MODAL ---------------------------- */
+const Modal = {
+  open(html){
+    qs('#modal-root').innerHTML = `<div class="modal-backdrop" onclick="Modal.close()"></div><div class="modal-sheet">${html}</div>`;
+    qs('#modal-root').classList.add('open');
+  },
+  close(){ qs('#modal-root').classList.remove('open'); qs('#modal-root').innerHTML=''; },
+  confirm({title, sub, confirmLabel, danger, onConfirm}){
+    this.open(`
+      <div class="modal-handle"></div>
+      <div class="modal-title">${esc(title)}</div>
+      <div class="modal-sub">${sub}</div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" onclick="Modal.close()">Cancel</button>
+        <button class="btn ${danger?'btn-danger':'btn-primary'}" id="modal-confirm-btn">${esc(confirmLabel||'Confirm')}</button>
+      </div>
+    `);
+    qs('#modal-confirm-btn').onclick = ()=>{ Modal.close(); onConfirm(); };
+  },
+  themeSheet(){
+    const s = App.state.settings;
+    const themes = [
+      {id:'light', label:'Light', bg:'linear-gradient(135deg,#FBF9F3,#F3EFE4)'},
+      {id:'dark', label:'Dark', bg:'linear-gradient(135deg,#132720,#0A1613)'},
+      {id:'amoled', label:'AMOLED', bg:'linear-gradient(135deg,#0A0F0D,#000000)'},
+    ];
+    const accents = [
+      {id:'gold', hex:'#D4AF6A'},{id:'teal', hex:'#2FA98C'},{id:'rose', hex:'#CC8A8F'},
+      {id:'violet', hex:'#9A8AD1'},{id:'sky', hex:'#6FA8C9'},
+    ];
+    this.open(`
+      <div class="modal-handle"></div>
+      <div class="modal-title">Appearance</div>
+      <div class="modal-sub">Pick a display mode and an accent colour. Changes apply instantly across the app.</div>
+      <div class="field"><label>Display mode</label>
+        <div class="theme-opt-row">
+          ${themes.map(t=>`<div class="theme-opt ${s.theme===t.id?'active':''}" onclick="setTheme('${t.id}')">
+            <div class="swatch" style="background:${t.bg}"></div><span>${t.label}</span></div>`).join('')}
+        </div>
+      </div>
+      <div class="field"><label>Accent colour</label>
+        <div class="accent-row">
+          ${accents.map(a=>`<div class="accent-dot ${s.accent===a.id?'active':''}" style="background:${a.hex}" onclick="setAccent('${a.id}')"></div>`).join('')}
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="Modal.close()" style="margin-top:8px;">Done</button>
+    `);
+  }
+};
+function setTheme(t){ App.state.settings.theme=t; saveSettings(); applyTheme(); Modal.themeSheet(); }
+function setAccent(a){ App.state.settings.accent=a; saveSettings(); applyTheme(); Modal.themeSheet(); }
+
+/* ---------------------------- ONBOARDING ---------------------------- */
+const OB_SLIDES = [
+  { icon:'compass', title:'Never miss a prayer', desc:'Accurate, astronomy-based prayer times for wherever you are, with gentle Adhan reminders.' },
+  { icon:'mosque', title:'Find your Qibla, instantly', desc:'A live compass points you straight to the Kaaba, anywhere on earth.' },
+  { icon:'quran', title:'Quran, duas & more', desc:'Read, listen to daily reminders, track your tasbih, and grow a little every day.' },
+];
+function renderOnboarding(){
+  const wrap = qs('#onboarding');
+  let idx = 0;
+  wrap.innerHTML = `
+    <div class="ob-slides" id="ob-slides">
+      ${OB_SLIDES.map((s,i)=>`
+        <div class="ob-slide" style="opacity:${i===0?1:0}; position:${i===0?'relative':'absolute'}">
+          <div class="ob-art" style="background:var(--accent-soft); color:var(--accent);">${ic(s.icon)}</div>
+          <h1 class="ob-title">${s.title}</h1>
+          <p class="ob-desc">${s.desc}</p>
+        </div>`).join('')}
+    </div>
+    <div class="ob-dots">${OB_SLIDES.map((_,i)=>`<div class="ob-dot ${i===0?'active':''}"></div>`).join('')}</div>
+    <div class="ob-actions">
+      <button class="btn btn-ghost" onclick="finishOnboarding()">Skip</button>
+      <button class="btn btn-primary" id="ob-next">Next</button>
+    </div>
+  `;
+  const slidesEl = qs('#ob-slides');
+  function show(i){
+    idx = i;
+    qsa('.ob-slide', slidesEl).forEach((el,j)=>{
+      el.style.position = j===i?'relative':'absolute';
+      el.style.opacity = j===i?'1':'0';
+    });
+    qsa('.ob-dot', wrap).forEach((d,j)=>d.classList.toggle('active', j===i));
+    qs('#ob-next').textContent = i===OB_SLIDES.length-1 ? 'Get started' : 'Next';
+  }
+  qs('#ob-next').onclick = ()=>{
+    if(idx < OB_SLIDES.length-1){ show(idx+1); } else { finishOnboarding(); }
+  };
+}
+function finishOnboarding(){
+  App.state.onboarded = true; Store.set('onboarded', true);
+  qs('#onboarding').style.display='none';
+  Router.go(App.currentUser() ? 'home' : 'login');
+}
+
+/* ---------------------------- PRAYER HELPERS ---------------------------- */
+const PRAYER_META = [
+  {key:'fajr', label:'Fajr', icon:'crescent'},
+  {key:'sunrise', label:'Sunrise', icon:'sunrise'},
+  {key:'dhuhr', label:'Dhuhr', icon:'sun'},
+  {key:'asr', label:'Asr', icon:'sun'},
+  {key:'maghrib', label:'Maghrib', icon:'sunset'},
+  {key:'isha', label:'Isha', icon:'moonstars'},
+];
+function todayTimes(dateOverride){
+  const s = App.state.settings;
+  return computePrayerTimes(dateOverride||new Date(), s.lat, s.lon, s.tz, s.calcMethod, s.asrMethod);
+}
+function nowDecimalHours(){
+  const d = new Date();
+  return d.getHours() + d.getMinutes()/60 + d.getSeconds()/3600;
+}
+function nextPrayerInfo(times){
+  const now = nowDecimalHours();
+  const order = ['fajr','dhuhr','asr','maghrib','isha'];
+  for(const key of order){ if(times[key] > now) return { key, time: times[key], secondsLeft: (times[key]-now)*3600 }; }
+  const tmr = computePrayerTimes(new Date(Date.now()+86400000), App.state.settings.lat, App.state.settings.lon, App.state.settings.tz, App.state.settings.calcMethod, App.state.settings.asrMethod);
+  return { key:'fajr', time: tmr.fajr, secondsLeft: (24-now+tmr.fajr)*3600, tomorrow:true };
+}
+function currentPrayerKey(times){
+  const now = nowDecimalHours();
+  const order = ['isha','maghrib','asr','dhuhr','fajr'];
+  for(const key of order){ if(now >= times[key]) return key; }
+  return 'isha';
+}
+function fmtCountdown(sec){
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+}
+
+/* ---------------------------- PAGES ---------------------------- */
+const PAGES = {};
+
+/* ---- HOME ---- */
+PAGES.home = {
+  render(){
+    const s = App.state.settings, u = App.currentUser();
+    const times = todayTimes();
+    const hr = new Date().getHours();
+    const greet = hr<5?'Good night':hr<12?'Good morning':hr<17?'Good afternoon':hr<21?'Good evening':'Good night';
+    const initials = u && u.name ? u.name.trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase() : 'G';
+    return `
+      <div class="pull-indicator" id="pull-ind">${ic('refresh','spin')} Refreshing…</div>
+      <div class="greeting-row">
+        <div>
+          <h2>${greet}${u && !u.guest ? ', '+esc(u.name.split(' ')[0]) : ''}</h2>
+          <div class="loc">${ic('pin')} ${esc(s.city)}, ${esc(s.country)}</div>
+        </div>
+        <div class="avatar" onclick="Router.go('profile')">${u && u.photo ? `<img src="${u.photo}">` : initials}</div>
+      </div>
+
+      <div class="mihrab-card" id="mihrab-card"></div>
+
+      <div class="section-title"><h3>Today's prayers</h3><button class="link-btn" onclick="Router.go('prayer-settings')">Settings</button></div>
+      <div class="prayer-list" id="prayer-list"></div>
+
+      <div class="section-title"><h3>Quick access</h3></div>
+      <div class="quick-grid">
+        ${quickItem('compass','Qibla','qibla')}
+        ${quickItem('quran','Quran','quran')}
+        ${quickItem('beads','Tasbih','tasbih')}
+        ${quickItem('heart','Duas','duas')}
+        ${quickItem('book','Hadith','hadith')}
+        ${quickItem('coins','Zakat','zakat')}
+        ${quickItem('calendar','Calendar','calendar')}
+        ${quickItem('mosque','Mosques','mosques')}
+      </div>
+    `;
+  },
+  onMount(){
+    let touchStartY=null, pulled=false;
+    const pageEl = qs('#page-el');
+    function onTouchStart(e){ if(pageEl.scrollTop<=0) touchStartY = e.touches[0].clientY; }
+    function onTouchMove(e){
+      if(touchStartY==null) return;
+      const dy = e.touches[0].clientY - touchStartY;
+      if(dy>60 && !pulled){ pulled=true; qs('#pull-ind').classList.add('show'); }
+    }
+    function onTouchEnd(){
+      if(pulled){ setTimeout(()=>{ qs('#pull-ind').classList.remove('show'); toast('Prayer times refreshed','success'); renderMihrab(); renderPrayerList(); pulled=false; }, 700); }
+      touchStartY=null;
+    }
+    pageEl.addEventListener('touchstart', onTouchStart, {passive:true});
+    pageEl.addEventListener('touchmove', onTouchMove, {passive:true});
+    pageEl.addEventListener('touchend', onTouchEnd);
+    window.__cleanup.push(()=>{
+      pageEl.removeEventListener('touchstart', onTouchStart);
+      pageEl.removeEventListener('touchmove', onTouchMove);
+      pageEl.removeEventListener('touchend', onTouchEnd);
+    });
+    renderMihrab(); renderPrayerList();
+    const iv = setInterval(()=>{ renderMihrab(); renderPrayerList(); }, 1000);
+    window.__cleanup.push(()=>clearInterval(iv));
+  }
+};
+function quickItem(icon,label,page){
+  return `<div class="quick-item" onclick="Router.go('${page}')"><div class="qi-icon">${ic(icon)}</div><span>${label}</span></div>`;
+}
+function renderMihrab(){
+  const el = qs('#mihrab-card'); if(!el) return;
+  const times = todayTimes();
+  const next = nextPrayerInfo(times);
+  const meta = PRAYER_META.find(p=>p.key===next.key);
+  const totalWindow = 6*3600; // approx visual scale for ring
+  const frac = Math.max(0, Math.min(1, 1 - (next.secondsLeft / totalWindow)));
+  const R = 48, C = 2*Math.PI*R;
+  el.innerHTML = `
+    <div class="mihrab-top">
+      <div>
+        <div class="eyebrow">Next Prayer${next.tomorrow?' · Tomorrow':''}</div>
+        <div class="next-name">${meta.label}</div>
+        <div class="mihrab-time">${decToClock(next.time, App.state.settings.clock24)}</div>
+      </div>
+      <div class="ring-wrap">
+        <svg viewBox="0 0 112 112">
+          <circle class="ring-bg" cx="56" cy="56" r="${R}"></circle>
+          <circle class="ring-fg" cx="56" cy="56" r="${R}" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-frac)}"></circle>
+        </svg>
+        <div class="ring-center"><div class="t">${fmtCountdown(next.secondsLeft)}</div><div class="l">remaining</div></div>
+      </div>
+    </div>`;
+}
+function renderPrayerList(){
+  const el = qs('#prayer-list'); if(!el) return;
+  const times = todayTimes();
+  const cur = currentPrayerKey(times);
+  el.innerHTML = PRAYER_META.map(p=>`
+    <div class="prayer-row ${p.key===cur && p.key!=='sunrise' ? 'current':''}">
+      <div class="left">
+        <div class="prayer-icon">${ic(p.icon)}</div>
+        <div><div class="prayer-name">${p.label}</div><div class="prayer-sub">${p.key==='sunrise'?'Not a prayer time':App.state.settings.calcMethod}</div></div>
+      </div>
+      <div class="prayer-time">${decToClock(times[p.key], App.state.settings.clock24)}</div>
+    </div>`).join('');
+}
+
+/* ---- AUTH PAGES ---- */
+let authTab = 'login';
+let authCaptcha = null;
+let authFailCounts = Store.get('auth_fail_counts', {}); // per-email local failed-attempt counter, just for the CAPTCHA UX — Firebase itself already rate-limits repeated failures server-side.
+function newCaptcha(){ const a=Math.ceil(Math.random()*9), b=Math.ceil(Math.random()*9); authCaptcha={a,b,answer:a+b}; }
+
+function firebaseNotice(){
+  if(!FIREBASE_READY){
+    if(FIREBASE_LOAD_ERROR === 'sdk-blocked'){
+      return `
+      <div class="captcha-box" style="text-align:left;border-color:var(--danger);">
+        <div style="font-weight:800;color:var(--danger);font-size:12.5px;margin-bottom:4px;">Firebase couldn't load</div>
+        <div style="font-size:12px;color:var(--text-dim);">Something on this network/browser blocked Google's Firebase scripts (a common cause: an ad blocker or privacy extension like uBlock/Brave Shields). Try disabling it for this page, or open in a different browser, then reload.</div>
+      </div>`;
+    }
+    if(FIREBASE_LOAD_ERROR){
+      return `
+      <div class="captcha-box" style="text-align:left;border-color:var(--danger);">
+        <div style="font-weight:800;color:var(--danger);font-size:12.5px;margin-bottom:4px;">Firebase failed to start</div>
+        <div style="font-size:12px;color:var(--text-dim);">${esc(FIREBASE_LOAD_ERROR)} — check the browser console for details.</div>
+      </div>`;
+    }
+    return `
+    <div class="captcha-box" style="text-align:left;border-color:var(--danger);">
+      <div style="font-weight:800;color:var(--danger);font-size:12.5px;margin-bottom:4px;">Firebase isn't configured yet</div>
+      <div style="font-size:12px;color:var(--text-dim);">Paste your project's keys into <code>FIREBASE_CONFIG</code> near the top of this file.</div>
+    </div>`;
+  }
+  if(IS_FILE_PROTOCOL){
+    return `
+    <div class="captcha-box" style="text-align:left;border-color:var(--warning);">
+      <div style="font-weight:800;color:var(--warning);font-size:12.5px;margin-bottom:4px;">This page was opened as a local file</div>
+      <div style="font-size:12px;color:var(--text-dim);">Sign-in and the live Hadith library need it served from a real web address (Firebase Hosting, GitHub Pages, or a local server) — not by double-clicking the file. See the setup notes at the top of the script.</div>
+    </div>`;
+  }
+  return '';
+}
+PAGES.login = {
+  render(){
+    return `
+      <div class="auth-hero">
+        <div class="brand-mark">S</div>
+        <h1>Welcome back</h1>
+        <p>Sign in to sync your prayer settings, tasbih history and profile.</p>
+      </div>
+      <div class="auth-tabs">
+        <div class="auth-tab ${authTab==='login'?'active':''}" onclick="authTab='login';Router.replace('login')">Log in</div>
+        <div class="auth-tab ${authTab==='signup'?'active':''}" onclick="authTab='signup';Router.replace('signup')">Sign up</div>
+      </div>
+      ${firebaseNotice()}
+      <div class="field">
+        <label>Email address</label>
+        <input type="email" id="li-email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <div class="input-wrap">
+          <input type="password" id="li-password" placeholder="Enter your password" autocomplete="current-password">
+          <button class="toggle-eye" onclick="togglePw('li-password',this)">${ic('eye')}</button>
+        </div>
+      </div>
+      <div id="captcha-slot"></div>
+      <div class="remember-row">
+        <div class="check-row" onclick="toggleCheck(this)"><div class="checkbox" id="li-remember"></div><span style="font-size:13px;color:var(--text-dim);font-weight:600;">Remember me</span></div>
+        <span class="link-btn" style="cursor:pointer;" onclick="Router.go('forgot')">Forgot password?</span>
+      </div>
+      <button class="btn btn-primary" id="login-btn" onclick="doLogin()">Log in</button>
+      <div id="login-status" style="text-align:center;font-size:12.5px;font-weight:700;margin-top:10px;min-height:16px;"></div>
+      <button class="btn btn-ghost" style="margin-top:4px;" onclick="doGuest()">Continue as guest</button>
+      <div class="auth-foot">Guest mode limits profile, social and sync features.</div>
+    `;
+  },
+  onMount(){}
+};
+PAGES.signup = {
+  render(){
+    return `
+      <div class="auth-hero">
+        <div class="brand-mark">S</div>
+        <h1>Create your account</h1>
+        <p>Takes less than a minute — no ads, no spam, ever.</p>
+      </div>
+      <div class="auth-tabs">
+        <div class="auth-tab ${authTab==='login'?'active':''}" onclick="authTab='login';Router.replace('login')">Log in</div>
+        <div class="auth-tab ${authTab==='signup'?'active':''}" onclick="authTab='signup';Router.replace('signup')">Sign up</div>
+      </div>
+      ${firebaseNotice()}
+      <div class="field"><label>Full name</label><input type="text" id="su-name" placeholder="Your name"></div>
+      <div class="field"><label>Email address</label><input type="email" id="su-email" placeholder="you@example.com"></div>
+      <div class="field">
+        <label>Password</label>
+        <div class="input-wrap">
+          <input type="password" id="su-password" placeholder="Min. 8 characters" oninput="updateStrength()">
+          <button class="toggle-eye" onclick="togglePw('su-password',this)">${ic('eye')}</button>
+        </div>
+        <div class="strength-bar"><div></div><div></div><div></div><div></div></div>
+        <div class="field-hint">Needs an uppercase, lowercase, number and symbol.</div>
+      </div>
+      <div class="field"><label>Country</label>
+        <select id="su-country">${countryOptions().map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>City</label>
+        <select id="su-city">${CITIES.map(c=>`<option value="${esc(c.c)}">${esc(c.c)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Preferred language</label>
+        <select id="su-lang"><option>English</option><option>Arabic</option><option>Urdu</option><option>Indonesian</option><option>Turkish</option></select>
+      </div>
+      <div class="check-row" onclick="toggleCheck(this)" style="margin-bottom:18px;"><div class="checkbox" id="su-terms"></div><span style="font-size:12.5px;color:var(--text-dim);">I agree to the Terms of Service &amp; Privacy Policy</span></div>
+      <button class="btn btn-primary" id="signup-btn" onclick="doSignup()">Create account</button>
+      <div id="signup-status" style="text-align:center;font-size:12.5px;font-weight:700;margin-top:10px;min-height:16px;"></div>
+      <div class="auth-foot">Already have an account? <span class="link-btn" style="cursor:pointer;" onclick="authTab='login';Router.replace('login')">Log in</span></div>
+    `;
+  },
+  onMount(){}
+};
+PAGES.forgot = {
+  title:'Reset password',
+  render(){
+    return `
+      <div class="auth-hero" style="padding-top:20px;">
+        <div class="brand-mark">S</div>
+        <h1 style="font-size:22px;">Forgot your password?</h1>
+        <p>We handle resets manually for now — enter your account email, then send us a quick message and we'll help you regain access.</p>
+      </div>
+      <div class="field"><label>Your account email</label><input type="email" id="fp-email" placeholder="you@example.com"></div>
+      <button class="btn btn-primary" onclick="doForgot()">${ic('mail')} Email us to reset my password</button>
+      <div class="field-hint" style="text-align:center;margin-top:10px;">This opens your email app with a message pre-addressed to <b>${SUPPORT_EMAIL}</b>.</div>
+      <div class="auth-foot"><span class="link-btn" style="cursor:pointer;" onclick="authTab='login';Router.go('login')">Back to log in</span></div>
+    `;
+  }, onMount(){}
+};
+
+function toggleCheck(row){
+  const box = qs('.checkbox', row);
+  box.classList.toggle('checked');
+  box.innerHTML = box.classList.contains('checked') ? ic('check') : '';
+}
+function togglePw(id, btn){
+  const inp = qs('#'+id);
+  const show = inp.type === 'password';
+  inp.type = show?'text':'password';
+  btn.innerHTML = ic(show?'eyeOff':'eye');
+}
+function updateStrength(){
+  const val = qs('#su-password').value;
+  let score = 0;
+  if(val.length>=8) score++;
+  if(/[a-z]/.test(val) && /[A-Z]/.test(val)) score++;
+  if(/\d/.test(val)) score++;
+  if(/[^\w\s]/.test(val)) score++;
+  const bars = qsa('.strength-bar div');
+  const colors = ['var(--danger)','var(--warning)','var(--accent)','var(--success)'];
+  bars.forEach((b,i)=>{ b.style.background = i<score ? colors[score-1] : 'var(--surface-2)'; });
+}
+async function doSignup(){
+  const btn = qs('#signup-btn');
+  const statusEl = qs('#signup-status');
+  const setStatus = (msg, color) => { if(statusEl){ statusEl.textContent = msg||''; statusEl.style.color = color||'var(--text-dim)'; } };
+  console.log('SalahGuard: signup button clicked');
+  try{
+    const name = qs('#su-name')?.value.trim();
+    const email = qs('#su-email')?.value.trim();
+    const password = qs('#su-password')?.value;
+    const country = qs('#su-country')?.value;
+    const city = qs('#su-city')?.value;
+    const language = qs('#su-lang')?.value;
+    const termsOk = qs('#su-terms')?.classList.contains('checked');
+    if(!name || !email || !password){ setStatus('Please fill in all fields.','var(--danger)'); return toast('Please fill in all fields.','error'); }
+    if(!termsOk){ setStatus('Please accept the Terms & Privacy Policy.','var(--danger)'); return toast('Please accept the Terms & Privacy Policy.','error'); }
+    if(btn){ btn.disabled = true; btn.textContent = 'Creating account…'; }
+    setStatus('Contacting Firebase…');
+    console.log('SalahGuard: calling Auth.signup for', email, '— FIREBASE_READY =', FIREBASE_READY);
+    await Auth.signup({name,email,password,country,city,language});
+    console.log('SalahGuard: signup succeeded');
+    const cityRec = CITIES.find(c=>c.c===city);
+    if(cityRec){ Object.assign(App.state.settings, {city:cityRec.c, country:cityRec.n, lat:cityRec.lat, lon:cityRec.lon, tz:cityRec.tz}); saveSettings(); }
+    setStatus('Account created!','var(--success)');
+    Modal.confirm({
+      title:'Check your inbox',
+      sub:`We've sent a real verification link to <b>${esc(email)}</b> via Firebase. Open it, then come back and tap "I've verified".`,
+      confirmLabel:"I've verified",
+      onConfirm: async ()=>{ await fbAuth.currentUser.reload(); toast('Welcome to SalahGuard!','success'); Router.go('home'); }
+    });
+  }catch(e){
+    console.error('SalahGuard signup error:', e);
+    const msg = firebaseErrorMessage(e);
+    setStatus(msg, 'var(--danger)');
+    toast(msg,'error');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'Create account'; }
+  }
+}
+async function doLogin(){
+  const btn = qs('#login-btn');
+  const statusEl = qs('#login-status');
+  const setStatus = (msg, color) => { if(statusEl){ statusEl.textContent = msg||''; statusEl.style.color = color||'var(--text-dim)'; } };
+  console.log('SalahGuard: login button clicked');
+  try{
+    const email = qs('#li-email')?.value.trim();
+    const password = qs('#li-password')?.value;
+    const remember = qs('#li-remember')?.classList.contains('checked');
+    if(!email || !password){ setStatus('Enter your email and password.','var(--danger)'); return toast('Enter your email and password.','error'); }
+    if(authCaptcha){
+      const val = parseInt(qs('#cap-answer')?.value||'-1',10);
+      if(val !== authCaptcha.answer){ setStatus('Captcha incorrect.','var(--danger)'); toast('Captcha incorrect, try again.','error'); newCaptcha(); renderCaptcha(); return; }
+    }
+    if(btn){ btn.disabled = true; btn.textContent = 'Signing in…'; }
+    setStatus('Contacting Firebase…');
+    console.log('SalahGuard: calling Auth.login for', email, '— FIREBASE_READY =', FIREBASE_READY);
+    const {user, isNewDevice} = await Auth.login(email,password,remember);
+    console.log('SalahGuard: login succeeded for', user.uid);
+    authFailCounts[email]=0; Store.set('auth_fail_counts', authFailCounts);
+    if(!user.emailVerified){ setStatus('Please verify your email first — check your inbox.','var(--danger)'); toast('Please verify your email — check your inbox for the link.','error'); return; }
+    if(isNewDevice) toast('New device sign-in detected.', null, 3200);
+    authCaptcha = null;
+    setStatus('Signed in — redirecting…','var(--success)');
+    toast('Welcome back!','success');
+    Router.go('home');
+  }catch(e){
+    console.error('SalahGuard login error:', e);
+    const msg = firebaseErrorMessage(e);
+    setStatus(msg, 'var(--danger)');
+    const email = qs('#li-email')?.value.trim() || '';
+    authFailCounts[email] = (authFailCounts[email]||0)+1; Store.set('auth_fail_counts', authFailCounts);
+    toast(msg,'error');
+    if(authFailCounts[email]>=3){ newCaptcha(); renderCaptcha(); }
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'Log in'; }
+  }
+}
+function renderCaptcha(){
+  const slot = qs('#captcha-slot'); if(!slot) return;
+  if(!authCaptcha){ slot.innerHTML=''; return; }
+  slot.innerHTML = `<div class="captcha-box">
+    <div style="font-size:12px;color:var(--text-faint);">Multiple failed attempts — quick check</div>
+    <div class="captcha-sum">${authCaptcha.a} + ${authCaptcha.b} = ?</div>
+    <input type="number" id="cap-answer" placeholder="Your answer" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);text-align:center;">
+  </div>`;
+}
+function firebaseErrorMessage(e){
+  if(!e || !e.code) return e && e.message ? e.message : 'Something went wrong.';
+  const map = {
+    'auth/email-already-in-use':'An account with this email already exists.',
+    'auth/invalid-email':'That email address looks invalid.',
+    'auth/weak-password':'Password is too weak — add length, numbers and symbols.',
+    'auth/user-not-found':'No account found with that email.',
+    'auth/wrong-password':'Incorrect password.',
+    'auth/invalid-credential':'Incorrect email or password.',
+    'auth/too-many-requests':'Too many attempts — please wait a few minutes and try again.',
+    'auth/unauthorized-domain':"This website's domain isn't authorized in Firebase yet — add it under Authentication → Settings → Authorized domains in the Firebase console.",
+    'auth/network-request-failed':'Network error — check your internet connection and try again.',
+    'auth/user-disabled':'This account has been disabled.',
+    'auth/operation-not-allowed':'Email/Password sign-in isn\'t enabled yet — turn it on in Firebase Console → Authentication → Sign-in method.',
+    'auth/api-key-not-valid.-please-pass-a-valid-api-key.':'Firebase API key looks invalid — double check FIREBASE_CONFIG.',
+  };
+  return map[e.code] || e.message || 'Something went wrong — check the browser console for details.';
+}
+function doGuest(){
+  Auth.guestLogin();
+  toast('Continuing as guest','success');
+  Router.go('home');
+}
+function doForgot(){
+  const email = qs('#fp-email').value.trim();
+  if(!email) return toast('Enter your account email first.','error');
+  const subject = encodeURIComponent('SalahGuard — Password Reset Request');
+  const body = encodeURIComponent(`Hi,\n\nI've forgotten my SalahGuard password and need help resetting it.\n\nMy account email: ${email}\n\nThanks!`);
+  window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+  toast('Opening your email app…','success');
+}
+
+/* ---- PRAYER SETTINGS ---- */
+PAGES['prayer-settings'] = {
+  title:'Prayer Settings',
+  render(){
+    const s = App.state.settings;
+    return `
+      <div class="mt-page-title"><h2>Prayer Settings</h2><p>Calculation method, madhab and location.</p></div>
+      <div class="section-title"><h3>Location</h3></div>
+      <div class="card card-tight" style="margin-bottom:8px;">
+        <div class="settings-row" onclick="useAutoLocation()">
+          <div class="sr-left"><div class="sr-icon">${ic('pin')}</div><div><div class="sr-title">Detect automatically</div><div class="sr-sub">Uses device GPS</div></div></div>
+          <div class="switch ${s.locationMode==='auto'?'on':''}" id="loc-auto-switch"><div class="knob"></div></div>
+        </div>
+      </div>
+      <div class="field"><label>Or choose a city manually</label>
+        <select id="city-select" onchange="setCityManual(this.value)">
+          ${citySelectOptions(s.city)}
+        </select>
+      </div>
+      <div class="field">
+        <label>City not listed? Enter it yourself</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="custom-city-name" placeholder="City name" style="flex:1;">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <input type="number" id="custom-city-lat" placeholder="Latitude" step="0.0001">
+          <input type="number" id="custom-city-lon" placeholder="Longitude" step="0.0001">
+        </div>
+        <div class="field-hint">Find your coordinates by searching "[your city] latitude longitude" — or just tap "Detect automatically" above instead.</div>
+        <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="setCityCustom()">Use this location</button>
+      </div>
+      <div class="section-title"><h3>Calculation method</h3></div>
+      ${CALC_METHODS.map(m=>`
+        <div class="method-option ${s.calcMethod===m.id?'active':''}" onclick="setCalcMethod('${m.id}')">
+          <div><div class="m-name">${m.name}</div><div class="m-sub">${m.sub}</div></div>
+          <div class="radio-dot"></div>
+        </div>`).join('')}
+      <div class="section-title"><h3>Asr calculation (madhab)</h3></div>
+      <div class="method-option ${s.asrMethod==='standard'?'active':''}" onclick="setAsrMethod('standard')">
+        <div><div class="m-name">Standard (Shafi'i, Maliki, Hanbali)</div><div class="m-sub">Shadow length = object length</div></div><div class="radio-dot"></div>
+      </div>
+      <div class="method-option ${s.asrMethod==='hanafi'?'active':''}" onclick="setAsrMethod('hanafi')">
+        <div><div class="m-name">Hanafi</div><div class="m-sub">Shadow length = 2× object length</div></div><div class="radio-dot"></div>
+      </div>
+      <div class="section-title"><h3>Time format</h3></div>
+      <div class="card card-tight">
+        <div class="settings-row">
+          <div class="sr-left"><div class="sr-icon">${ic('clock')}</div><div><div class="sr-title">24-hour clock</div></div></div>
+          <div class="switch ${s.clock24?'on':''}" onclick="toggleClock24(this)"><div class="knob"></div></div>
+        </div>
+      </div>
+      <div class="section-title"><h3>Prayer Focus Lock</h3></div>
+      <div class="card card-tight">
+        <div class="settings-row">
+          <div class="sr-left"><div class="sr-icon">${ic('lock')}</div><div><div class="sr-title">Lock at prayer time</div><div class="sr-sub">Full-screen reminder, checks in 2 min later</div></div></div>
+          <div class="switch ${s.focusLock?'on':''}" onclick="toggleFocusLock(this)"><div class="knob"></div></div>
+        </div>
+      </div>
+      <div class="field-hint" style="margin:8px 0 4px;">This can only lock SalahGuard's own screen — a web app can't block other installed apps (YouTube, Instagram, etc.) system-wide. That needs a native Android app with special OS permissions, which is a separate project from this one — just ask if you'd like a walkthrough.</div>
+      <div class="section-title"><h3>This week</h3></div>
+      <div class="card card-tight"><table class="week-table" id="week-table"></table></div>
+    `;
+  },
+  onMount(){ renderWeekTable(); }
+};
+function toggleFocusLock(el){ App.state.settings.focusLock = !App.state.settings.focusLock; saveSettings(); el.classList.toggle('on'); }
+function renderWeekTable(){
+  const el = qs('#week-table'); if(!el) return;
+  const s = App.state.settings;
+  let rows = `<tr><th>Day</th><th>Fajr</th><th>Dhuhr</th><th>Asr</th><th>Maghrib</th><th>Isha</th></tr>`;
+  const today = new Date();
+  for(let i=0;i<7;i++){
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate()+i);
+    const t = computePrayerTimes(d, s.lat, s.lon, s.tz, s.calcMethod, s.asrMethod);
+    const label = i===0?'Today':d.toLocaleDateString(undefined,{weekday:'short'});
+    rows += `<tr class="${i===0?'today':''}"><td>${label}</td><td>${decToClock(t.fajr,s.clock24)}</td><td>${decToClock(t.dhuhr,s.clock24)}</td><td>${decToClock(t.asr,s.clock24)}</td><td>${decToClock(t.maghrib,s.clock24)}</td><td>${decToClock(t.isha,s.clock24)}</td></tr>`;
+  }
+  el.innerHTML = rows;
+}
+function useAutoLocation(){
+  if(!navigator.geolocation){ toast('Geolocation not supported on this device.','error'); return; }
+  toast('Detecting location…');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    App.state.settings.locationMode='auto';
+    App.state.settings.lat = pos.coords.latitude;
+    App.state.settings.lon = pos.coords.longitude;
+    App.state.settings.tz = -new Date().getTimezoneOffset()/60;
+    App.state.settings.city = 'Current location'; App.state.settings.country='';
+    saveSettings(); toast('Location updated','success'); Router.replace('prayer-settings');
+  }, err=>{ toast('Could not get location — pick a city manually.','error'); }, {timeout:8000});
+}
+function citySelectOptions(selectedCity){
+  const groups = {};
+  CITIES.forEach(c=>{ (groups[c.n] = groups[c.n]||[]).push(c); });
+  return Object.entries(groups).map(([country, list])=>
+    `<optgroup label="${esc(country)}">${list.map(c=>`<option value="${esc(c.c)}" ${selectedCity===c.c?'selected':''}>${esc(cityLabel(c))}</option>`).join('')}</optgroup>`
+  ).join('');
+}
+function setCityManual(cityName){
+  const c = CITIES.find(c=>c.c===cityName); if(!c) return;
+  Object.assign(App.state.settings, {locationMode:'manual', city:c.c, country:c.n, lat:c.lat, lon:c.lon, tz:c.tz});
+  saveSettings(); toast('Location set to '+c.c,'success'); renderWeekTable();
+}
+function setCityCustom(){
+  const name = qs('#custom-city-name').value.trim();
+  const lat = parseFloat(qs('#custom-city-lat').value);
+  const lon = parseFloat(qs('#custom-city-lon').value);
+  if(!name) return toast('Enter a city name.','error');
+  if(isNaN(lat) || isNaN(lon) || lat<-90 || lat>90 || lon<-180 || lon>180) return toast('Enter valid latitude (-90 to 90) and longitude (-180 to 180).','error');
+  const tz = -new Date().getTimezoneOffset()/60; // uses this device's current timezone offset
+  Object.assign(App.state.settings, {locationMode:'manual', city:name, country:'', lat, lon, tz});
+  saveSettings(); toast('Location set to '+name,'success'); Router.replace('prayer-settings');
+}
+function setCalcMethod(id){ App.state.settings.calcMethod=id; saveSettings(); Router.replace('prayer-settings'); }
+function setAsrMethod(id){ App.state.settings.asrMethod=id; saveSettings(); Router.replace('prayer-settings'); }
+function toggleClock24(el){ App.state.settings.clock24 = !App.state.settings.clock24; saveSettings(); el.classList.toggle('on'); renderWeekTable(); }
+
+/* ---- QIBLA ---- */
+PAGES.qibla = {
+  title:'Qibla Compass',
+  render(){
+    const s = App.state.settings;
+    const bearing = qiblaBearing(s.lat, s.lon);
+    return `
+      <div class="mt-page-title center-col" style="align-items:center;"><h2>Qibla Compass</h2><p>Point the top of your device towards the Kaaba icon.</p></div>
+      <div class="qibla-wrap">
+        <div class="qibla-deg">Bearing from ${esc(s.city)}: <b style="color:var(--accent);font-family:var(--font-mono);">${bearing.toFixed(1)}°</b></div>
+        <div class="compass" id="compass">
+          <div class="compass-ring"></div>
+          <div class="compass-n">N</div>
+          <div class="needle-pivot" id="needle-pivot" style="transform:rotate(${bearing}deg)">
+            <div class="kaaba-dot">${ic('mosque')}</div>
+            <div class="needle"></div>
+          </div>
+          <div class="center-dot"></div>
+        </div>
+        <button class="btn btn-outline" id="qibla-perm-btn" style="max-width:260px;margin-top:22px;" onclick="enableCompass()">Enable live compass</button>
+        <div class="qibla-note" id="qibla-note">Tap "Enable live compass" to use your device's sensor. Without it, this shows the fixed bearing from your saved location.</div>
+      </div>
+    `;
+  },
+  onMount(){}
+};
+function enableCompass(){
+  function handler(e){
+    let heading = e.webkitCompassHeading!=null ? e.webkitCompassHeading : (e.alpha!=null ? (360 - e.alpha) : null);
+    if(heading==null) return;
+    const s = App.state.settings;
+    const bearing = qiblaBearing(s.lat, s.lon);
+    const rel = (bearing - heading + 360) % 360;
+    const pivot = qs('#needle-pivot'); if(pivot) pivot.style.transform = `rotate(${rel}deg)`;
+    const note = qs('#qibla-note');
+    if(note){
+      const aligned = Math.abs(((rel+180)%360)-180) < 6;
+      note.innerHTML = aligned ? `<span class="qibla-aligned">✓ Aligned with Qibla</span>` : `Rotate until the mosque icon points to the top of your screen.`;
+    }
+  }
+  function start(){
+    window.addEventListener('deviceorientationabsolute', handler, true);
+    window.addEventListener('deviceorientation', handler, true);
+    window.__cleanup.push(()=>{ window.removeEventListener('deviceorientationabsolute',handler,true); window.removeEventListener('deviceorientation',handler,true); });
+    const btn = qs('#qibla-perm-btn'); if(btn) btn.style.display='none';
+    toast('Live compass enabled','success');
+  }
+  if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+    DeviceOrientationEvent.requestPermission().then(state=>{
+      if(state==='granted') start(); else toast('Compass permission denied.','error');
+    }).catch(()=> toast('Compass not available on this device.','error'));
+  } else {
+    start();
+  }
+}
+
+/* ---- QURAN ---- */
+let currentSurahNo = 1;
+PAGES.quran = {
+  title:'Quran',
+  render(){
+    const all = [...SURAHS.map(s=>({no:s.no,en:s.en,mean:s.mean,ar:s.ar,count:s.count,full:true})),
+      ...SURAH_INDEX_ONLY.map(([no,en,mean,count])=>({no,en,mean,ar:'',count,full:false}))].sort((a,b)=>a.no-b.no);
+    return `
+      <div class="mt-page-title"><h2>Quran</h2><p>Read with translation, or open the full offline pack.</p></div>
+      <div class="field"><input type="text" id="surah-search" placeholder="Search a surah…" oninput="filterSurahs(this.value)"></div>
+      <div id="surah-list">
+        ${all.map(s=>`
+          <div class="surah-row" onclick="${s.full?`openSurah(${s.no})`:`toast('Connect the full Quran offline pack to read this surah.')`}">
+            <div class="surah-num">${s.no}</div>
+            <div class="surah-mid"><div class="surah-en">${s.en}</div><div class="surah-sub">${s.mean} · ${s.count} verses</div></div>
+            <div class="surah-ar">${s.ar}</div>
+          </div>`).join('')}
+      </div>
+    `;
+  },
+  onMount(){}
+};
+function filterSurahs(q){
+  q = q.toLowerCase();
+  qsa('#surah-list .surah-row').forEach(row=>{
+    row.style.display = row.textContent.toLowerCase().includes(q) ? 'flex' : 'none';
+  });
+}
+function openSurah(no){ currentSurahNo = no; Router.go('quran-reader'); }
+PAGES['quran-reader'] = {
+  title:'Reader',
+  render(){
+    const s = SURAHS.find(s=>s.no===currentSurahNo) || SURAHS[0];
+    return `
+      <div class="reader-toolbar">
+        <div><div style="font-weight:800;">${s.en}</div><div style="font-size:11.5px;color:var(--text-faint);">${s.mean} · ${s.count} verses</div></div>
+        <div class="chip" onclick="toast('Bookmarked','success')">${ic('heart')} Save</div>
+      </div>
+      ${s.ayat.map((a,i)=>`
+        <div class="ayah-card">
+          <div class="ayah-ar">${a.ar} <span class="ayah-num-badge">${i+1}</span></div>
+          <div class="ayah-tr">${a.tr}</div>
+        </div>`).join('')}
+      <div class="empty-state" style="padding-top:24px;">
+        <p>End of available sample verses for this surah.<br>Connect the full Quran text pack for complete offline reading.</p>
+      </div>
+    `;
+  },
+  onMount(){}
+};
+
+/* ---- HADITH ---- */
+const HADITH_BOOKS = [
+  {id:'bukhari', label:'Sahih al-Bukhari'},
+  {id:'muslim', label:'Sahih Muslim'},
+  {id:'abudawud', label:'Sunan Abu Dawud'},
+  {id:'tirmidhi', label:"Jami' at-Tirmidhi"},
+  {id:'ibnmajah', label:'Sunan Ibn Majah'},
+  {id:'nasai', label:"Sunan an-Nasa'i"},
+];
+let hadithActiveBook = 'bukhari';
+const hadithBookCache = {};
+async function loadHadithBook(id){
+  if(hadithBookCache[id]) return hadithBookCache[id];
+  const url = `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/eng-${id}.min.json`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('network');
+  const data = await res.json();
+  const list = (data && data.hadiths) ? data.hadiths : (Array.isArray(data) ? data : []);
+  hadithBookCache[id] = list;
+  return list;
+}
+PAGES.hadith = {
+  title:'Hadith',
+  render(){
+    const cats = ['All', ...new Set(HADITHS.map(h=>h.cat))];
+    return `
+      <div class="mt-page-title"><h2>Hadith</h2><p>Short reminders, plus a live library from the major collections.</p></div>
+      <div class="chip-row" id="hadith-chips">
+        ${cats.map((c,i)=>`<div class="chip ${i===0?'active':''}" onclick="filterHadith('${c}',this)">${c}</div>`).join('')}
+      </div>
+      <div style="margin-top:16px;" id="hadith-list">
+        ${HADITHS.map(h=>`
+          <div class="card hadith-card" data-cat="${h.cat}">
+            <span class="badge badge-accent" style="margin-bottom:10px;display:inline-block;">${h.cat}</span>
+            <div class="htext">${h.text}</div>
+            <div class="hadith-src">${h.src}</div>
+          </div>`).join('')}
+      </div>
+
+      <div class="section-title"><h3>Hadith library</h3></div>
+      <div class="chip-row" id="hadith-book-chips">
+        ${HADITH_BOOKS.map((b,i)=>`<div class="chip ${i===0?'active':''}" data-id="${b.id}" onclick="selectHadithBook('${b.id}')">${b.label}</div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin:12px 0;">
+        <input type="text" id="hadith-search" placeholder="Search within this book…" style="flex:1;padding:12px 14px;border-radius:14px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);" oninput="searchHadithBook(this.value)">
+        <button class="btn btn-outline btn-sm" onclick="randomHadith()">${ic('spark')} Random</button>
+      </div>
+      <div id="hadith-live-list"></div>
+      <div class="field-hint" style="margin-top:6px;">Pulled live from an open hadith dataset covering the major collections. Requires an internet connection; double-check attribution/grading against sunnah.com before quoting publicly.</div>
+    `;
+  },
+  onMount(){ selectHadithBook(hadithActiveBook); }
+};
+function filterHadith(cat, el){
+  qsa('#hadith-chips .chip').forEach(c=>c.classList.remove('active')); el.classList.add('active');
+  qsa('#hadith-list .hadith-card').forEach(card=>{
+    card.style.display = (cat==='All' || card.dataset.cat===cat) ? 'block' : 'none';
+  });
+}
+function hadithLoadErrorHtml(e){
+  console.error('SalahGuard hadith load error:', e);
+  if(IS_FILE_PROTOCOL){
+    return `<div class="empty-state">${ic('book')}<p>This page is open as a local file — browsers block this kind of request from file://. Serve it from a real web address (Firebase Hosting, GitHub Pages, or a local server) and it'll work.</p></div>`;
+  }
+  return `<div class="empty-state">${ic('book')}<p>Couldn't load this collection — check your internet connection and try again.</p></div>`;
+}
+async function selectHadithBook(id){
+  hadithActiveBook = id;
+  qsa('#hadith-book-chips .chip').forEach(c=>c.classList.toggle('active', c.dataset.id===id));
+  const container = qs('#hadith-live-list'); if(!container) return;
+  container.innerHTML = `<div class="skel" style="height:76px;border-radius:16px;margin-bottom:10px;"></div>`.repeat(3);
+  try{
+    const list = await loadHadithBook(id);
+    renderHadithLive(list.slice(0,15));
+  }catch(e){
+    container.innerHTML = hadithLoadErrorHtml(e);
+  }
+}
+function renderHadithLive(list){
+  const container = qs('#hadith-live-list'); if(!container) return;
+  if(!list.length){ container.innerHTML = `<div class="empty-state">${ic('search')}<p>No matching hadith in this book.</p></div>`; return; }
+  const bookLabel = HADITH_BOOKS.find(b=>b.id===hadithActiveBook)?.label || '';
+  container.innerHTML = list.map(h=>`
+    <div class="card hadith-card">
+      <span class="badge badge-accent" style="margin-bottom:10px;display:inline-block;">#${esc(h.hadithnumber||'')}</span>
+      <div class="htext">${esc((h.text||'').slice(0,700))}${(h.text||'').length>700?'…':''}</div>
+      <div class="hadith-src">${bookLabel}${h.reference?` · ${esc(h.reference.book)}:${esc(h.reference.hadith)}`:''}</div>
+    </div>`).join('');
+}
+async function randomHadith(){
+  const container = qs('#hadith-live-list'); if(!container) return;
+  container.innerHTML = `<div class="skel" style="height:76px;border-radius:16px;"></div>`;
+  try{
+    const list = await loadHadithBook(hadithActiveBook);
+    const h = list[Math.floor(Math.random()*list.length)];
+    renderHadithLive([h]);
+  }catch(e){ container.innerHTML = hadithLoadErrorHtml(e); }
+}
+async function searchHadithBook(q){
+  q = q.trim().toLowerCase();
+  const container = qs('#hadith-live-list'); if(!container) return;
+  try{
+    const list = await loadHadithBook(hadithActiveBook);
+    if(!q){ renderHadithLive(list.slice(0,15)); return; }
+    renderHadithLive(list.filter(h=>(h.text||'').toLowerCase().includes(q)).slice(0,30));
+  }catch(e){ console.error('SalahGuard hadith search error:', e); }
+}
+
+/* ---- DUAS ---- */
+PAGES.duas = {
+  title:'Daily Duas',
+  render(){
+    const cats = ['All', ...new Set(DUAS.map(d=>d.cat))];
+    return `
+      <div class="mt-page-title"><h2>Daily Duas</h2><p>Short supplications for everyday moments.</p></div>
+      <div class="chip-row" id="dua-chips">
+        ${cats.map((c,i)=>`<div class="chip ${i===0?'active':''}" onclick="filterDua('${c}',this)">${c}</div>`).join('')}
+      </div>
+      <div style="margin-top:16px;" id="dua-list">
+        ${DUAS.map(d=>`
+          <div class="card dua-card" data-cat="${d.cat}">
+            <span class="badge badge-accent" style="margin-bottom:10px;display:inline-block;">${d.cat}</span>
+            <div class="dua-ar">${d.ar}</div>
+            <div class="dua-translit">${d.translit}</div>
+            <div class="dua-meaning">${d.mean}</div>
+          </div>`).join('')}
+      </div>
+    `;
+  },
+  onMount(){}
+};
+function filterDua(cat, el){
+  qsa('#dua-chips .chip').forEach(c=>c.classList.remove('active')); el.classList.add('active');
+  qsa('#dua-list .dua-card').forEach(card=>{
+    card.style.display = (cat==='All' || card.dataset.cat===cat) ? 'block' : 'none';
+  });
+}
+
+/* ---- TASBIH ---- */
+let tasbihCount = Store.get('tasbih_count', 0);
+let tasbihTarget = Store.get('tasbih_target', 33);
+let tasbihDhikrIdx = Store.get('tasbih_dhikr', 0);
+PAGES.tasbih = {
+  title:'Tasbih Counter',
+  render(){
+    const d = DHIKR_LIST[tasbihDhikrIdx];
+    const R = 100, C = 2*Math.PI*R;
+    const frac = Math.min(1, tasbihCount/tasbihTarget);
+    return `
+      <div class="mt-page-title center-col" style="align-items:center;"><h2>Tasbih Counter</h2><p>Tap the ring to count. Long-press to reset.</p></div>
+      <div class="tasbih-wrap">
+        <div class="tasbih-dhikr">${d.ar}</div>
+        <div class="tasbih-mean">${d.mean}</div>
+        <div class="tasbih-ring" id="tasbih-ring">
+          <svg viewBox="0 0 220 220">
+            <circle cx="110" cy="110" r="${R}" fill="none" stroke="var(--border)" stroke-width="10"></circle>
+            <circle id="tasbih-arc" cx="110" cy="110" r="${R}" fill="none" stroke="var(--accent)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-frac)}" style="transition:stroke-dashoffset .25s var(--ease);"></circle>
+          </svg>
+          <div class="tasbih-count"><div class="n" id="tasbih-n">${tasbihCount}</div><div class="of">of ${tasbihTarget}</div></div>
+        </div>
+        <div class="tasbih-target-row">
+          ${[33,99,100].map(t=>`<div class="chip ${tasbihTarget===t?'active':''}" onclick="setTasbihTarget(${t})">${t}</div>`).join('')}
+        </div>
+        <div class="field" style="width:100%;margin-top:18px;"><label>Dhikr</label>
+          <select onchange="setTasbihDhikr(this.value)">
+            ${DHIKR_LIST.map((d,i)=>`<option value="${i}" ${i===tasbihDhikrIdx?'selected':''}>${d.mean}</option>`).join('')}
+          </select>
+        </div>
+        <div class="tasbih-actions">
+          <button class="btn btn-ghost" onclick="resetTasbih()">Reset</button>
+          <button class="btn btn-primary" onclick="tapTasbih()">Count +1</button>
+        </div>
+      </div>
+    `;
+  },
+  onMount(){
+    const ring = qs('#tasbih-ring');
+    ring.addEventListener('click', tapTasbih);
+    window.__cleanup.push(()=>ring.removeEventListener('click', tapTasbih));
+  }
+};
+function tapTasbih(){
+  tasbihCount++;
+  vibrate(12);
+  if(tasbihCount>=tasbihTarget){
+    vibrate([20,40,20]);
+    App.state.tasbihHistory.unshift({dhikr:DHIKR_LIST[tasbihDhikrIdx].mean, count:tasbihCount, time:Date.now()});
+    Store.set('tasbih_history', App.state.tasbihHistory.slice(0,50));
+    toast('Target reached — counter reset','success');
+    tasbihCount = 0;
+  }
+  Store.set('tasbih_count', tasbihCount);
+  Router.replace('tasbih');
+}
+function resetTasbih(){ tasbihCount=0; Store.set('tasbih_count',0); Router.replace('tasbih'); }
+function setTasbihTarget(t){ tasbihTarget=t; Store.set('tasbih_target',t); Router.replace('tasbih'); }
+function setTasbihDhikr(i){ tasbihDhikrIdx=parseInt(i,10); Store.set('tasbih_dhikr',tasbihDhikrIdx); Router.replace('tasbih'); }
+
+/* ---- ZAKAT ---- */
+PAGES.zakat = {
+  title:'Zakat Calculator',
+  render(){
+    return `
+      <div class="mt-page-title"><h2>Zakat Calculator</h2><p>2.5% on qualifying wealth held for one lunar year.</p></div>
+      <div class="field"><label>Cash &amp; bank balances</label><input type="number" id="zk-cash" placeholder="0" oninput="calcZakat()"></div>
+      <div class="field"><label>Gold &amp; silver value</label><input type="number" id="zk-gold" placeholder="0" oninput="calcZakat()"></div>
+      <div class="field"><label>Investments &amp; business assets</label><input type="number" id="zk-invest" placeholder="0" oninput="calcZakat()"></div>
+      <div class="field"><label>Debts &amp; liabilities owed</label><input type="number" id="zk-debt" placeholder="0" oninput="calcZakat()"></div>
+      <div class="zakat-result">
+        <div class="amt" id="zk-amt">0.00</div>
+        <div class="lbl">Zakat due (2.5%)</div>
+      </div>
+      <div class="field-hint" style="margin-top:14px;text-align:center;">This is a simple estimate. Consult a scholar for your specific nisab threshold and asset types.</div>
+    `;
+  },
+  onMount(){ calcZakat(); }
+};
+function calcZakat(){
+  const num = id => parseFloat(qs('#'+id)?.value)||0;
+  const total = num('zk-cash')+num('zk-gold')+num('zk-invest')-num('zk-debt');
+  const zakat = Math.max(0,total)*0.025;
+  const el = qs('#zk-amt'); if(el) el.textContent = zakat.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+/* ---- ISLAMIC CALENDAR / RAMADAN ---- */
+PAGES.calendar = {
+  title:'Islamic Calendar',
+  render(){
+    const today = new Date();
+    const h = gregorianToHijri(today);
+    const monthName = HIJRI_MONTHS[(h.month-1+12)%12];
+    const isRamadan = h.month===9;
+    let daysInHMonth = 30;
+    const rows = [];
+    for(let d=1; d<=daysInHMonth; d+=7){
+      rows.push(Array.from({length:7},(_,i)=>d+i).filter(x=>x<=daysInHMonth));
+    }
+    const s = App.state.settings;
+    let ramadanRows = '';
+    if(true){
+      for(let i=0;i<7;i++){
+        const gd = new Date(today.getFullYear(), today.getMonth(), today.getDate()+i);
+        const t = computePrayerTimes(gd, s.lat, s.lon, s.tz, s.calcMethod, s.asrMethod);
+        ramadanRows += `<tr class="${i===0?'today':''}"><td>${gd.toLocaleDateString(undefined,{weekday:'short', day:'numeric'})}</td><td>${decToClock(t.fajr,s.clock24)}</td><td>${decToClock(t.maghrib,s.clock24)}</td></tr>`;
+      }
+    }
+    return `
+      <div class="mt-page-title"><h2>Islamic Calendar</h2><p>Today is ${h.day} ${monthName} ${h.year} AH${isRamadan?' — Ramadan Mubarak!':''}</p></div>
+      <div class="card" style="text-align:center;padding:24px 16px;">
+        <div style="font-family:var(--font-display);font-size:34px;">${h.day}</div>
+        <div style="color:var(--text-dim);font-weight:700;margin-top:2px;">${monthName} ${h.year} AH</div>
+        <div class="field-hint" style="margin-top:8px;">Hijri dates are approximate (±1 day) versus local moon sighting.</div>
+      </div>
+      <div class="section-title"><h3>Sehri &amp; Iftar — next 7 days</h3></div>
+      <div class="card card-tight">
+        <table class="week-table"><tr><th>Day</th><th>Sehri ends</th><th>Iftar</th></tr>${ramadanRows}</table>
+      </div>
+      <div class="section-title"><h3>Upcoming Islamic events</h3></div>
+      <div class="card card-tight">
+        <div class="settings-row"><div class="sr-left"><div class="sr-icon">${ic('crescent')}</div><div><div class="sr-title">Ramadan</div><div class="sr-sub">9th Hijri month</div></div></div></div>
+        <div class="settings-row"><div class="sr-left"><div class="sr-icon">${ic('spark')}</div><div><div class="sr-title">Eid al-Fitr</div><div class="sr-sub">1 Shawwal</div></div></div></div>
+        <div class="settings-row"><div class="sr-left"><div class="sr-icon">${ic('mosque')}</div><div><div class="sr-title">Hajj</div><div class="sr-sub">8–13 Dhu al-Hijjah</div></div></div></div>
+        <div class="settings-row"><div class="sr-left"><div class="sr-icon">${ic('spark')}</div><div><div class="sr-title">Eid al-Adha</div><div class="sr-sub">10 Dhu al-Hijjah</div></div></div></div>
+      </div>
+    `;
+  },
+  onMount(){}
+};
+
+/* ---- MOSQUES ---- */
+PAGES.mosques = {
+  title:'Nearby Mosques',
+  render(){
+    return `
+      <div class="mt-page-title"><h2>Nearby Mosques</h2><p>Sample data — connect a places API for live results.</p></div>
+      <div class="field"><input type="text" id="mosque-search" placeholder="Search mosques…" oninput="filterMosques(this.value)"></div>
+      <div id="mosque-list">
+        ${MOSQUES.map(m=>`
+          <div class="mosque-row">
+            <div class="mosque-icon">${ic('mosque')}</div>
+            <div style="flex:1;">
+              <div class="mosque-name">${m.name}</div>
+              <div class="mosque-sub">${m.addr}</div>
+            </div>
+            <div class="mosque-dist">${m.dist}</div>
+          </div>`).join('')}
+      </div>
+      <div class="empty-state">
+        <p>Connect the Google Places API (or another provider) with a server-side key to show real nearby mosques and live directions.</p>
+      </div>
+    `;
+  },
+  onMount(){}
+};
+function filterMosques(q){
+  q=q.toLowerCase();
+  qsa('#mosque-list .mosque-row').forEach(r=>{ r.style.display = r.textContent.toLowerCase().includes(q)?'flex':'none'; });
+}
+
+/* ---- NOTIFICATIONS ---- */
+PAGES.notifications = {
+  title:'Notifications',
+  render(){
+    const log = App.state.notifLog;
+    return `
+      <div class="mt-page-title"><h2>Notifications</h2><p>Prayer alerts, reminders and app updates.</p></div>
+      ${log.length===0 ? `<div class="empty-state">${ic('bell')}<p>No notifications yet.</p></div>` :
+      log.map(n=>`
+        <div class="card card-tight" style="margin-bottom:10px;">
+          <div style="font-weight:700;font-size:13.5px;">${esc(n.title)}</div>
+          <div style="font-size:12.5px;color:var(--text-dim);margin-top:4px;">${esc(n.body)}</div>
+          <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">${new Date(n.time).toLocaleString()}</div>
+        </div>`).join('')}
+      <div class="section-title"><h3>Custom schedule</h3></div>
+      <div class="card card-tight">
+        ${notifRow('fajr','Fajr reminder')}${notifRow('dhuhr','Dhuhr reminder')}${notifRow('asr','Asr reminder')}
+        ${notifRow('maghrib','Maghrib reminder')}${notifRow('isha','Isha reminder')}${notifRow('jumuah',"Jumu'ah reminder")}
+        ${notifRow('ramadan','Ramadan reminders')}${notifRow('dailyVerse','Daily Quran verse')}${notifRow('dailyHadith','Daily Hadith')}
+        ${notifRow('silentDuringPrayer','Silent mode during prayer')}
+      </div>
+    `;
+  },
+  onMount(){}
+};
+function notifRow(key,label){
+  const on = App.state.settings.notif[key];
+  return `<div class="settings-row"><div class="sr-title">${label}</div><div class="switch ${on?'on':''}" onclick="toggleNotif('${key}',this)"><div class="knob"></div></div></div>`;
+}
+function toggleNotif(key, el){ App.state.settings.notif[key] = !App.state.settings.notif[key]; saveSettings(); el.classList.toggle('on'); }
+
+/* ---- MORE HUB ---- */
+PAGES.more = {
+  title:'More',
+  render(){
+    const u = App.currentUser();
+    return `
+      <div class="mt-page-title"><h2>More</h2><p>Profile, tools and app settings.</p></div>
+      <div class="card profile-card" onclick="Router.go('profile')">
+        <div class="profile-avatar">${u && u.photo ? `<img src="${u.photo}">` : (u && !u.guest ? u.name[0].toUpperCase() : 'G')}</div>
+        <div style="flex:1;"><div class="profile-name">${u && !u.guest ? esc(u.name) : 'Guest'}</div><div class="profile-email">${u && !u.guest ? esc(u.email) : 'Sign in to sync your data'}</div></div>
+        ${ic('chevronR','chevron')}
+      </div>
+      <div class="section-title"><h3>Islamic tools</h3></div>
+      <div class="card card-tight">
+        ${moreRow('coins','Zakat Calculator','zakat')}
+        ${moreRow('calendar','Islamic Calendar & Ramadan','calendar')}
+        ${moreRow('mosque','Nearby Mosques','mosques')}
+        ${moreRow('heart','Daily Duas','duas')}
+        ${moreRow('book','Hadith','hadith')}
+        ${moreRow('beads','Tasbih Counter','tasbih')}
+        ${moreRow('sliders','Prayer Settings','prayer-settings')}
+      </div>
+      <div class="section-title"><h3>Account</h3></div>
+      <div class="card card-tight">
+        ${moreRow('users','Profile','profile')}
+        ${moreRow('shield','Security & sessions','security')}
+        ${moreRow('lock','Privacy','privacy')}
+        ${moreRow('ban','Blocked users','blocked')}
+        ${moreRow('download','Data & backup','data')}
+        ${moreRow('bell','Notifications','notifications')}
+      </div>
+      <div class="section-title"><h3>About</h3></div>
+      <div class="card card-tight">
+        ${moreRow('spark','About SalahGuard','about')}
+        ${moreRow('shield','Admin panel (demo)','admin')}
+      </div>
+      ${u && !u.guest ? `<button class="btn btn-ghost" style="margin-top:20px;" onclick="confirmLogout()">${'Log out'}</button>` :
+        `<button class="btn btn-primary" style="margin-top:20px;" onclick="Router.go('login')">Sign in / Create account</button>`}
+    `;
+  },
+  onMount(){}
+};
+function moreRow(icon,label,page){
+  return `<div class="settings-row" onclick="Router.go('${page}')">
+    <div class="sr-left"><div class="sr-icon">${ic(icon)}</div><div class="sr-title">${label}</div></div>
+    ${ic('chevronR','chevron')}
+  </div>`;
+}
+function confirmLogout(){
+  Modal.confirm({ title:'Log out?', sub:'You can always sign back in.', confirmLabel:'Log out', onConfirm:()=>{ Auth.logout(); toast('Logged out','success'); Router.go('login'); } });
+}
+
+/* ---- PROFILE ---- */
+PAGES.profile = {
+  title:'Profile',
+  render(){
+    const u = App.currentUser();
+    if(!u || u.guest){
+      return `<div class="empty-state">${ic('users')}<p>Sign in to create and edit your profile.</p></div><button class="btn btn-primary" onclick="Router.go('login')">Sign in</button>`;
+    }
+    return `
+      <div class="mt-page-title"><h2>Edit Profile</h2></div>
+      <div class="center-col" style="padding:10px 0 20px;">
+        <div class="profile-avatar" style="width:88px;height:88px;font-size:32px;position:relative;">
+          ${u.photo?`<img src="${u.photo}">`:u.name[0].toUpperCase()}
+        </div>
+        <label class="chip" style="margin-top:12px;cursor:pointer;">${ic('camera')} Change photo
+          <input type="file" accept="image/*" style="display:none;" onchange="uploadPhoto(this)">
+        </label>
+      </div>
+      <div class="field"><label>Full name</label><input type="text" id="pf-name" value="${esc(u.name)}"></div>
+      <div class="field"><label>Email</label><input type="email" value="${esc(u.email)}" disabled style="opacity:.6;"></div>
+      <div class="field"><label>Country</label>
+        <select id="pf-country">${countryOptions().map(n=>`<option ${u.country===n?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
+      <div class="field"><label>City</label>
+        <select id="pf-city">${CITIES.map(c=>`<option ${u.city===c.c?'selected':''}>${c.c}</option>`).join('')}</select></div>
+      <div class="field"><label>Language</label>
+        <select id="pf-lang"><option ${u.language==='English'?'selected':''}>English</option><option ${u.language==='Arabic'?'selected':''}>Arabic</option><option ${u.language==='Urdu'?'selected':''}>Urdu</option><option ${u.language==='Indonesian'?'selected':''}>Indonesian</option><option ${u.language==='Turkish'?'selected':''}>Turkish</option></select></div>
+      <button class="btn btn-primary" onclick="saveProfile()">Save changes</button>
+      <div class="divider"></div>
+      <button class="btn btn-danger" onclick="confirmDeleteAccount()">Delete account</button>
+    `;
+  },
+  onMount(){}
+};
+function uploadPhoto(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{ const u = App.currentUser(); u.photo = reader.result; App.save('users'); toast('Photo updated','success'); Router.replace('profile'); };
+  reader.readAsDataURL(file);
+}
+function saveProfile(){
+  const u = App.currentUser();
+  u.name = qs('#pf-name').value.trim() || u.name;
+  u.country = qs('#pf-country').value; u.city = qs('#pf-city').value; u.language = qs('#pf-lang').value;
+  App.save('users');
+  toast('Profile updated','success');
+  Router.go('more');
+}
+function confirmDeleteAccount(){
+  Modal.open(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">Delete account</div>
+    <div class="modal-sub">This permanently deletes your account and local data. Type <b>DELETE</b> to confirm.</div>
+    <div class="field"><input type="text" id="del-confirm-input" placeholder="Type DELETE"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-ghost" onclick="Modal.close()">Cancel</button>
+      <button class="btn btn-danger" onclick="finalizeDeleteAccount()">Delete forever</button>
+    </div>
+  `);
+}
+function finalizeDeleteAccount(){
+  if(qs('#del-confirm-input').value.trim() !== 'DELETE') return toast('Please type DELETE to confirm.','error');
+  Auth.deleteAccount(); Modal.close(); toast('Account deleted','success'); Router.go('login');
+}
+
+/* ---- SECURITY / SESSIONS ---- */
+PAGES.security = {
+  title:'Security',
+  render(){
+    const u = App.currentUser();
+    const guestBlock = !u || u.guest;
+    return `
+      <div class="mt-page-title"><h2>Security</h2></div>
+      <div class="section-title"><h3>Password</h3></div>
+      <div class="card card-tight">
+        <div class="field" style="margin-bottom:10px;"><input type="password" id="sec-current" placeholder="Current password" ${guestBlock?'disabled':''}></div>
+        <div class="field" style="margin-bottom:10px;"><input type="password" id="sec-new" placeholder="New password" ${guestBlock?'disabled':''}></div>
+        <button class="btn btn-primary" onclick="changePassword()" ${guestBlock?'disabled':''}>Update password</button>
+      </div>
+      <div class="section-title"><h3>Devices</h3></div>
+      <div class="card card-tight" id="devices-card">${renderDevices()}</div>
+      <button class="btn btn-danger" style="margin-top:12px;" onclick="confirmLogoutAll()" ${guestBlock?'disabled':''}>Log out from all devices</button>
+      <div class="section-title"><h3>Activity log</h3></div>
+      <div class="card card-tight">
+        <div class="settings-row"><div class="sr-left"><div class="sr-icon">${ic('history')}</div><div><div class="sr-title">Account created</div><div class="sr-sub">${u&&u.createdAt?new Date(u.createdAt).toLocaleString():'—'}</div></div></div></div>
+        <div class="settings-row"><div class="sr-left"><div class="sr-icon">${ic('fingerprint')}</div><div><div class="sr-title">This session</div><div class="sr-sub">${deviceLabel()}</div></div></div></div>
+      </div>
+    `;
+  },
+  onMount(){}
+};
+function renderDevices(){
+  const u = App.currentUser();
+  if(!u || u.guest) return `<div class="field-hint">Sign in to view your devices.</div>`;
+  const devs = App.state.devices[u.id] || [];
+  if(devs.length===0) return `<div class="field-hint">No devices on record.</div>`;
+  return devs.map(d=>`<div class="session-row"><div class="session-icon">${ic('monitor')}</div><div style="flex:1;"><div style="font-weight:700;font-size:13.5px;">${esc(d.label)}</div><div style="font-size:11px;color:var(--text-faint);">${new Date(d.time).toLocaleString()}</div></div></div>`).join('');
+}
+async function changePassword(){
+  const u = App.currentUser();
+  const cur = qs('#sec-current').value, nw = qs('#sec-new').value;
+  if(!u || u.guest) return;
+  const hash = await sha256(cur+':'+u.salt);
+  if(hash !== u.hash) return toast('Current password is incorrect.','error');
+  if(!PASS_RULE.test(nw)) return toast('New password does not meet requirements.','error');
+  u.salt = uid(); u.hash = await sha256(nw+':'+u.salt); App.save('users');
+  toast('Password updated','success');
+}
+function confirmLogoutAll(){
+  Modal.confirm({ title:'Log out everywhere?', sub:'This signs you out of every device, including this one.', confirmLabel:'Log out all', danger:true,
+    onConfirm:()=>{ Auth.logoutAllDevices(); toast('Logged out from all devices','success'); Router.go('login'); } });
+}
+
+/* ---- PRIVACY ---- */
+PAGES.privacy = {
+  title:'Privacy',
+  render(){
+    const p = App.state.settings.privacy;
+    return `
+      <div class="mt-page-title"><h2>Privacy</h2></div>
+      <div class="card card-tight">
+        <div class="settings-row"><div class="sr-left"><div class="sr-icon">${ic('users')}</div><div><div class="sr-title">Profile visible to others</div><div class="sr-sub">Show your name &amp; photo publicly</div></div></div>
+          <div class="switch ${p.profileVisible?'on':''}" onclick="togglePrivacy('profileVisible',this)"><div class="knob"></div></div></div>
+        <div class="settings-row"><div class="sr-left"><div class="sr-icon">${ic('clock')}</div><div><div class="sr-title">Show activity status</div></div></div>
+          <div class="switch ${p.activityStatus?'on':''}" onclick="togglePrivacy('activityStatus',this)"><div class="knob"></div></div></div>
+      </div>
+      <div class="field-hint" style="margin-top:14px;">Enforcing these preferences across other users requires a real backend (Firestore rules / server checks) — this demo only stores your preference.</div>
+    `;
+  }, onMount(){}
+};
+function togglePrivacy(key, el){ App.state.settings.privacy[key] = !App.state.settings.privacy[key]; saveSettings(); el.classList.toggle('on'); }
+
+/* ---- BLOCKED USERS ---- */
+PAGES.blocked = {
+  title:'Blocked Users',
+  render(){
+    const list = App.state.blocked;
+    return `
+      <div class="mt-page-title"><h2>Blocked Users</h2><p>Blocked accounts can't message you or view your profile.</p></div>
+      <div class="field" style="display:flex;gap:8px;">
+        <input type="text" id="block-name-input" placeholder="Username to block">
+        <button class="btn btn-primary btn-sm" onclick="addBlock()">Block</button>
+      </div>
+      <div id="blocked-list">
+        ${list.length===0? `<div class="empty-state">${ic('ban')}<p>No blocked users.</p></div>` :
+        list.map((b,i)=>`<div class="blocked-row"><span style="font-weight:700;font-size:13.5px;">${esc(b.name)}</span><button class="btn btn-ghost btn-sm" onclick="unblock(${i})">Unblock</button></div>`).join('')}
+      </div>
+      <div class="section-title"><h3>Report a user</h3></div>
+      <div class="card card-tight">
+        <div class="field"><input type="text" id="report-name" placeholder="Username"></div>
+        <div class="field"><select id="report-cat"><option>Harassment</option><option>Spam</option><option>Impersonation</option><option>Inappropriate content</option><option>Other</option></select></div>
+        <button class="btn btn-outline" onclick="submitReport()">Submit report</button>
+      </div>
+    `;
+  }, onMount(){}
+};
+function addBlock(){
+  const name = qs('#block-name-input').value.trim(); if(!name) return;
+  App.state.blocked.push({name, until:null}); Store.set('blocked', App.state.blocked);
+  toast('User blocked','success'); Router.replace('blocked');
+}
+function unblock(i){ App.state.blocked.splice(i,1); Store.set('blocked', App.state.blocked); Router.replace('blocked'); }
+function submitReport(){
+  const name = qs('#report-name').value.trim(); const cat = qs('#report-cat').value;
+  if(!name) return toast('Enter a username to report.','error');
+  App.state.reports.push({name,cat,time:Date.now()}); Store.set('reports_sent', App.state.reports);
+  toast('Report submitted for review','success');
+  qs('#report-name').value='';
+}
+
+/* ---- DATA & BACKUP ---- */
+PAGES.data = {
+  title:'Data & Backup',
+  render(){
+    return `
+      <div class="mt-page-title"><h2>Data &amp; Backup</h2></div>
+      <div class="card card-tight">
+        ${moreRowAction('download','Export my data (.json)','exportData()')}
+        ${moreRowAction('upload','Restore from backup','triggerImport()')}
+      </div>
+      <input type="file" id="import-input" accept="application/json" style="display:none;" onchange="importData(this)">
+      <div class="field-hint" style="margin-top:14px;">Exports everything stored locally: settings, tasbih history and (if signed in) your profile. Nothing is uploaded anywhere.</div>
+    `;
+  }, onMount(){}
+};
+function moreRowAction(icon,label,onclick){
+  return `<div class="settings-row" onclick="${onclick}"><div class="sr-left"><div class="sr-icon">${ic(icon)}</div><div class="sr-title">${label}</div></div>${ic('chevronR','chevron')}</div>`;
+}
+function exportData(){
+  const payload = { settings:App.state.settings, tasbih_history:App.state.tasbihHistory, user: App.currentUser() };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='salahguard-backup.json'; a.click();
+  toast('Backup downloaded','success');
+}
+function triggerImport(){ qs('#import-input').click(); }
+function importData(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      if(data.settings) Object.assign(App.state.settings, data.settings);
+      saveSettings();
+      toast('Backup restored','success');
+      Router.go('more');
+    }catch(e){ toast('Invalid backup file.','error'); }
+  };
+  reader.readAsText(file);
+}
+
+/* ---- ABOUT ---- */
+PAGES.about = {
+  title:'About',
+  render(){
+    return `
+      <div class="mt-page-title center-col" style="align-items:center;">
+        <div class="brand-mark" style="width:60px;height:60px;font-size:28px;margin-bottom:14px;">S</div>
+        <h2>SalahGuard</h2>
+        <p>Version 1.0.0 · Front-end prototype</p>
+      </div>
+      <div class="card" style="margin-top:16px;line-height:1.7;font-size:13.5px;color:var(--text-dim);">
+        SalahGuard is a premium Islamic companion app for prayer times, Qibla direction, Quran, duas, Zakat and more.
+        <br><br>
+        Created by <b style="color:var(--text);">M. Hammad Shafiq</b>.
+      </div>
+      <div class="card card-tight" style="margin-top:14px;">
+        ${moreRowAction('globe','View on GitHub','toast(\'Add your repository link here\')')}
+      </div>
+    `;
+  }, onMount(){}
+};
+
+/* ---- ADMIN PANEL (demo — mock data, client-only) ---- */
+const ADMIN_MOCK_USERS = Store.get('admin_mock_users', [
+  {id:uid(),name:'Amina Yusuf',email:'amina@example.com',status:'active',role:'user'},
+  {id:uid(),name:'Omar Siddiqui',email:'omar@example.com',status:'active',role:'moderator'},
+  {id:uid(),name:'Fatima Noor',email:'fatima@example.com',status:'banned',role:'user'},
+  {id:uid(),name:'Bilal Ahmed',email:'bilal@example.com',status:'active',role:'user'},
+  {id:uid(),name:'Sara Khan',email:'sara@example.com',status:'shadow-banned',role:'user'},
+]);
+Store.set('admin_mock_users', ADMIN_MOCK_USERS);
+const ADMIN_MOCK_REPORTS = Store.get('admin_mock_reports', [
+  {id:uid(),user:'Fatima Noor',cat:'Spam',status:'pending'},
+  {id:uid(),user:'Unknown123',cat:'Harassment',status:'pending'},
+  {id:uid(),user:'Sara Khan',cat:'Impersonation',status:'resolved'},
+]);
+Store.set('admin_mock_reports', ADMIN_MOCK_REPORTS);
+const ADMIN_AUDIT = Store.get('admin_audit', [
+  {t:Date.now()-86400000, who:'System', what:'Nightly backup completed'},
+]);
+Store.set('admin_audit', ADMIN_AUDIT);
+
+function adminLog(who, what){ App.state.adminAuditRT = ADMIN_AUDIT; ADMIN_AUDIT.unshift({t:Date.now(),who,what}); Store.set('admin_audit', ADMIN_AUDIT); }
+
+PAGES.admin = {
+  title:'Admin (Demo)',
+  render(){
+    if(!App.state.adminAuthed){
+      return `
+        <div class="mt-page-title center-col" style="align-items:center;">
+          <div class="sr-icon" style="width:56px;height:56px;background:var(--accent-soft);color:var(--accent);margin-bottom:10px;">${ic('shield')}</div>
+          <h2>Admin access</h2>
+          <p>Demo gate — default password is <b>admin123</b>.</p>
+        </div>
+        <div class="field"><input type="password" id="admin-pass" placeholder="Admin password"></div>
+        <button class="btn btn-primary" onclick="adminLogin()">Enter dashboard</button>
+      `;
+    }
+    const stats = [
+      {v: ADMIN_MOCK_USERS.length, l:'Total users'},
+      {v: ADMIN_MOCK_USERS.filter(u=>u.status==='active').length, l:'Active today'},
+      {v: ADMIN_MOCK_REPORTS.filter(r=>r.status==='pending').length, l:'Reports pending'},
+      {v: ADMIN_MOCK_USERS.filter(u=>u.status==='banned').length, l:'Banned accounts'},
+    ];
+    const barData = [40,65,52,80,72,90,60];
+    return `
+      <div class="mt-page-title"><h2>Admin Dashboard</h2><p>Demo data — wire to a real backend to make this live.</p></div>
+      <div class="admin-stat-grid">
+        ${stats.map(s=>`<div class="admin-stat"><div class="v">${s.v}</div><div class="l">${s.l}</div></div>`).join('')}
+      </div>
+      <div class="section-title"><h3>Weekly active users</h3></div>
+      <div class="card card-tight"><div class="bar-chart">${barData.map(v=>`<div class="bar" style="height:${v}%;"></div>`).join('')}</div></div>
+      <div class="section-title"><h3>Manage</h3></div>
+      <div class="card card-tight">
+        ${moreRowAction('users','User management',"Router.go('admin-users')")}
+        ${moreRowAction('flag','Reports queue',"Router.go('admin-reports')")}
+        ${moreRowAction('bell','Broadcast notification',"Router.go('admin-broadcast')")}
+        ${moreRowAction('history','Audit log',"Router.go('admin-audit')")}
+      </div>
+      <button class="btn btn-ghost" style="margin-top:16px;" onclick="App.state.adminAuthed=false;Router.go('more')">Exit admin</button>
+    `;
+  },
+  onMount(){}
+};
+function adminLogin(){
+  const pass = qs('#admin-pass').value;
+  const stored = Store.get('admin_password','admin123');
+  if(pass===stored){ App.state.adminAuthed = true; adminLog('Admin','Signed in to admin panel'); Router.replace('admin'); }
+  else toast('Incorrect admin password.','error');
+}
+PAGES['admin-users'] = {
+  title:'User Management',
+  render(){
+    return `
+      <div class="mt-page-title"><h2>User Management</h2></div>
+      <div class="field"><input type="text" id="admin-user-search" placeholder="Search users…" oninput="filterAdminUsers(this.value)"></div>
+      <div id="admin-user-list">
+        ${ADMIN_MOCK_USERS.map(u=>`
+          <div class="admin-table-row" data-name="${esc(u.name.toLowerCase())}">
+            <div>
+              <div class="admin-user-name">${esc(u.name)} ${u.role!=='user'?`<span class="badge badge-accent">${u.role}</span>`:''}</div>
+              <div class="admin-user-sub">${esc(u.email)} · <span class="${u.status==='banned'?'badge badge-danger':u.status==='shadow-banned'?'badge badge-warn':'badge badge-success'}">${u.status}</span></div>
+            </div>
+            <button class="btn btn-sm ${u.status==='banned'?'btn-outline':'btn-danger'}" onclick="toggleBan('${u.id}')">${u.status==='banned'?'Unban':'Ban'}</button>
+          </div>`).join('')}
+      </div>
+    `;
+  }, onMount(){}
+};
+function filterAdminUsers(q){
+  q=q.toLowerCase();
+  qsa('#admin-user-list .admin-table-row').forEach(r=>{ r.style.display = r.dataset.name.includes(q)?'flex':'none'; });
+}
+function toggleBan(id){
+  const u = ADMIN_MOCK_USERS.find(u=>u.id===id); if(!u) return;
+  u.status = u.status==='banned' ? 'active' : 'banned';
+  Store.set('admin_mock_users', ADMIN_MOCK_USERS);
+  adminLog('Admin', `${u.status==='banned'?'Banned':'Unbanned'} ${u.name}`);
+  toast(u.status==='banned'?'User banned':'User unbanned','success');
+  Router.replace('admin-users');
+}
+PAGES['admin-reports'] = {
+  title:'Reports Queue',
+  render(){
+    return `
+      <div class="mt-page-title"><h2>Reports Queue</h2></div>
+      <div id="admin-reports-list">
+        ${ADMIN_MOCK_REPORTS.map(r=>`
+          <div class="admin-table-row">
+            <div><div class="admin-user-name">${esc(r.user)}</div><div class="admin-user-sub">${r.cat} · <span class="badge ${r.status==='pending'?'badge-warn':'badge-success'}">${r.status}</span></div></div>
+            ${r.status==='pending' ? `<div style="display:flex;gap:6px;"><button class="btn btn-sm btn-outline" onclick="resolveReport('${r.id}',true)">Resolve</button><button class="btn btn-sm btn-ghost" onclick="resolveReport('${r.id}',false)">Dismiss</button></div>` : ''}
+          </div>`).join('')}
+      </div>
+    `;
+  }, onMount(){}
+};
+function resolveReport(id, resolved){
+  const r = ADMIN_MOCK_REPORTS.find(r=>r.id===id); if(!r) return;
+  r.status = 'resolved'; Store.set('admin_mock_reports', ADMIN_MOCK_REPORTS);
+  adminLog('Admin', `${resolved?'Resolved':'Dismissed'} report on ${r.user}`);
+  Router.replace('admin-reports');
+}
+PAGES['admin-broadcast'] = {
+  title:'Broadcast',
+  render(){
+    return `
+      <div class="mt-page-title"><h2>Broadcast Notification</h2><p>Sends to the local notification feed (demo).</p></div>
+      <div class="field"><label>Title</label><input type="text" id="bc-title" placeholder="e.g. New feature available"></div>
+      <div class="field"><label>Message</label><textarea id="bc-body" rows="4" placeholder="Write your announcement…"></textarea></div>
+      <button class="btn btn-primary" onclick="sendBroadcast()">Send to all users</button>
+    `;
+  }, onMount(){}
+};
+function sendBroadcast(){
+  const title = qs('#bc-title').value.trim(), body = qs('#bc-body').value.trim();
+  if(!title||!body) return toast('Fill in both fields.','error');
+  App.state.notifLog.unshift({id:uid(),title,body,time:Date.now()});
+  Store.set('notif_log', App.state.notifLog);
+  adminLog('Admin', `Broadcast sent: "${title}"`);
+  toast('Broadcast sent','success');
+  Router.go('admin');
+}
+PAGES['admin-audit'] = {
+  title:'Audit Log',
+  render(){
+    return `
+      <div class="mt-page-title"><h2>Audit Log</h2></div>
+      ${ADMIN_AUDIT.map(a=>`
+        <div class="card card-tight" style="margin-bottom:8px;">
+          <div style="font-size:13px;font-weight:700;">${esc(a.what)}</div>
+          <div style="font-size:11px;color:var(--text-faint);margin-top:3px;">${esc(a.who)} · ${new Date(a.t).toLocaleString()}</div>
+        </div>`).join('')}
+    `;
+  }, onMount(){}
+};
+
+/* ---------------------------- PRAYER FOCUS LOCK ----------------------------
+   Locks the SalahGuard screen itself at prayer time and checks in 2 minutes
+   after the Adhan. IMPORTANT LIMIT: a web page can only ever cover its own
+   tab/window — it cannot block other installed apps (YouTube, Instagram,
+   etc.) system-wide. True cross-app blocking needs a native Android app
+   using an AccessibilityService or a SYSTEM_ALERT_WINDOW overlay +
+   UsageStatsManager (the same mechanisms apps like Forest or Digital
+   Wellbeing use) — a completely different project from this single HTML
+   file. Ask me if you'd like a walkthrough of building that natively. */
+const PRAYER_ORDER = ['fajr','dhuhr','asr','maghrib','isha'];
+function todayKey(d){ d = d||new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function getPrayerLog(){ return Store.get('prayer_log', {}); }
+function setPrayerDone(key){
+  const log = getPrayerLog(); const day = todayKey();
+  log[day] = log[day]||{}; log[day][key] = true;
+  Store.set('prayer_log', log);
+}
+function isPrayerDone(key){ const log = getPrayerLog(); return !!(log[todayKey()]||{})[key]; }
+function playChime(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    [660,880,660].forEach((f,i)=>{
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type='sine'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001, now+i*0.32);
+      g.gain.linearRampToValueAtTime(0.22, now+i*0.32+0.06);
+      g.gain.linearRampToValueAtTime(0.0001, now+i*0.32+0.3);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(now+i*0.32); o.stop(now+i*0.32+0.32);
+    });
+  }catch(e){ /* Web Audio unavailable — silently skip the tone. */ }
+}
+let focusState = { active:false, key:null, phase:null, checkTimer:null };
+function startFocusWatcher(){
+  setInterval(()=>{
+    if(!App.state.settings.focusLock || focusState.active) return;
+    const times = todayTimes();
+    const now = nowDecimalHours();
+    for(const key of PRAYER_ORDER){
+      if(!App.state.settings.notif[key] || isPrayerDone(key)) continue;
+      if(now >= times[key] && now < times[key] + (2/60)){ triggerFocusLock(key); break; }
+    }
+  }, 20000);
+}
+function triggerFocusLock(key){
+  focusState = { active:true, key, phase:'adhan', checkTimer:null };
+  playChime(); vibrate([200,100,200,100,200]);
+  renderFocusOverlay();
+  focusState.checkTimer = setTimeout(()=>{ focusState.phase='ask'; renderFocusOverlay(); }, 2*60*1000);
+}
+function renderFocusOverlay(){
+  const root = qs('#focus-lock-root'); if(!root) return;
+  if(!focusState.active){ root.style.display='none'; root.innerHTML=''; return; }
+  root.style.display='block';
+  const meta = PRAYER_META.find(p=>p.key===focusState.key);
+  root.innerHTML = focusState.phase==='adhan' ? `
+    <div class="focus-lock">
+      <div class="focus-icon">${ic('mosque')}</div>
+      <h2>It's time for ${meta.label}</h2>
+      <p>Put your phone down and pray — we'll check in with you in a couple of minutes.</p>
+      <button class="btn btn-ghost" onclick="silenceFocus()">Silence sound</button>
+    </div>` : `
+    <div class="focus-lock">
+      <div class="focus-icon">${ic('heart')}</div>
+      <h2>Have you prayed ${meta.label}?</h2>
+      <p>Confirm to unlock SalahGuard.</p>
+      <button class="btn btn-primary" onclick="confirmPrayerDone()">Yes, Alhamdulillah</button>
+      <button class="btn btn-ghost" onclick="snoozeFocus()">Not yet — remind me in 5 min</button>
+    </div>`;
+}
+function silenceFocus(){ toast('Sound silenced'); }
+function confirmPrayerDone(){
+  setPrayerDone(focusState.key);
+  clearTimeout(focusState.checkTimer);
+  focusState = { active:false, key:null, phase:null, checkTimer:null };
+  renderFocusOverlay();
+  toast('Marked as prayed — Jazakallah khair!','success');
+  if(TAB_ROOTS.includes(Router.current)) Router.render();
+}
+function snoozeFocus(){
+  clearTimeout(focusState.checkTimer);
+  focusState.checkTimer = setTimeout(()=>{ renderFocusOverlay(); }, 5*60*1000);
+  toast("We'll ask again in 5 minutes");
+}
+
+/* ---------------------------- BOOTSTRAP ---------------------------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  applyTheme();
+  const notifBtn = qs('#btn-notif'); if(notifBtn) notifBtn.innerHTML = ic('bell');
+  const themeBtn = qs('#btn-theme'); if(themeBtn) themeBtn.innerHTML = ic('sliders');
+
+  if(!App.state.onboarded){
+    renderOnboarding();
+    return;
+  }
+  qs('#onboarding').style.display = 'none';
+  startFocusWatcher();
+  if(IS_FILE_PROTOCOL){
+    setTimeout(()=> toast("Open this from a real web address (not a double-clicked file) for sign-in and the Hadith library to work.", null, 5000), 600);
+  }
+
+  if(FIREBASE_READY){
+    fbAuth.onAuthStateChanged(async (user)=>{
+      App.fbUser = user;
+      if(user){
+        try{ const doc = await db.collection('users').doc(user.uid).get(); App.profile = doc.exists ? doc.data() : {}; }
+        catch(e){ App.profile = {}; }
+      } else {
+        App.profile = null;
+      }
+      if(!window.__authResolved){
+        window.__authResolved = true;
+        Router.go(App.currentUser() ? 'home' : 'login');
+      } else if(['home','more','profile'].includes(Router.current)){
+        Router.render();
+      }
+    });
+  } else {
+    Router.go(App.currentUser() ? 'home' : 'login');
+  }
+});
+</script>
+</body>
+</html>
